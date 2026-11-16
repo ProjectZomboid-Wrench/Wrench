@@ -4,4 +4,5 @@ public enum UIFont {
     Small,
     Medium,
     Large,
+    Title,
 }

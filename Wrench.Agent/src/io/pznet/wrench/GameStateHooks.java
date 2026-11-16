@@ -10,12 +10,20 @@ import net.bytebuddy.implementation.bytecode.assign.Assigner;
 import zombie.gameStates.GameStateMachine;
 
 /**
- * Puts {@link WrenchPromptState} in front of the main menu using B42's own suspend/return: a state whose update
- * returns Yield is pushed aside for whatever its redirectState returns, and re-entered once that state finishes.
- * MainScreenState doesn't override redirectState, so that half hooks the base GameState.
+ * Wrench's own game states, slotted in through PZ's state machine rather than by editing its state list. A state that
+ * finishes (Continue) or yields (Yield) is asked for a redirectState before the machine moves on; neither TISLogoState
+ * nor MainScreenState overrides it, so one hook on the base GameState covers both:
+ * <ul>
+ * <li>TISLogoState finishing is redirected once to {@link WrenchLogoState}, after which the machine carries on to the
+ * next state as usual.</li>
+ * <li>MainScreenState is made to yield to {@link WrenchPromptState} while mods wait for permission, and is
+ * re-entered once the prompt finishes.</li>
+ * </ul>
  */
-final class PermissionPromptHook {
-    private PermissionPromptHook() {
+public final class GameStateHooks {
+    private static boolean splashShown;
+
+    private GameStateHooks() {
     }
 
     static void install(Instrumentation instrumentation) {
@@ -49,9 +57,20 @@ final class PermissionPromptHook {
         @Advice.OnMethodExit(suppress = Throwable.class)
         static void exit(@Advice.This Object self,
                          @Advice.Return(readOnly = false, typing = Assigner.Typing.DYNAMIC) Object result) {
-            var prompt = WrenchPermissions.takeYieldRedirect(self);
-            if (prompt != null)
-                result = prompt;
+            var redirect = GameStateHooks.redirect(self);
+            if (redirect != null)
+                result = redirect;
         }
+    }
+
+    public static synchronized Object redirect(Object state) {
+        var prompt = WrenchPermissions.takeYieldRedirect(state);
+        if (prompt != null)
+            return prompt;
+        if (!splashShown && state.getClass().getName().equals("zombie.gameStates.TISLogoState")) {
+            splashShown = true;
+            return new WrenchLogoState();
+        }
+        return null;
     }
 }

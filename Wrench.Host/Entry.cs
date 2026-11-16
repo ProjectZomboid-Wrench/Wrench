@@ -4,6 +4,7 @@ using JNIBinding;
 using JNIBinding.Bindings;
 using JNIBinding.Bindings.Native.Types;
 using Wrench.Host.Events;
+using Wrench.Host.Game;
 using Wrench.Host.Logging;
 using Wrench.Host.Lua;
 using Wrench.Host.Mods;
@@ -57,6 +58,7 @@ public static unsafe class Entry
                     (delegate* unmanaged<IntPtr, IntPtr, IntPtr, byte, void>)&PermissionPrompt.OnPermissionDecision)
                 .Complete();
             PermissionPrompt.Initialize(runtime);
+            ReportToAgent(runtime);
 
             LuaBridge.Initialize(runtime);
             LuaHost.Instance = LuaBridge.Instance;
@@ -71,6 +73,8 @@ public static unsafe class Entry
             Log.Info($"{mods.Count} Wrench-local mod(s) loaded");
             LuaEventRouter.AddHostHook(LuaEvents.OnGameBoot, AnnounceToLua);
             LuaEventRouter.AddHostHook(LuaEvents.OnGameBoot, () => PzMods.Sync(LuaBridge.Instance));
+            LuaEventRouter.AddHostHook(LuaEvents.OnGameBoot,
+                () => MainMenuVersion.Install($"Wrench {Version} ({RuntimeInformation.FrameworkDescription})"));
             return Attached;
         }
         catch (Exception e)
@@ -83,6 +87,20 @@ public static unsafe class Entry
     // Lets Lua (notably the Wrench PZ metamod) detect the loader. Host hooks run before Lua's own OnGameBoot callbacks.
     private static void AnnounceToLua() =>
         LuaBridge.Instance.SetHostGlobal("WrenchHost", new Dictionary<string, object?> { ["version"] = Version });
+
+    // Lets the agent's splash say which host it's running.
+    private static void ReportToAgent(JavaRuntime runtime)
+    {
+        var env = runtime.Env;
+        var info = runtime.FindSystemClass("io.pznet.wrench.WrenchInfo").Value;
+        var setHost = env.GetStaticMethodId(info, "setHost", "(Ljava/lang/String;Ljava/lang/String;)V");
+        var version = env.AsJString(Version);
+        var dotnet = env.AsJString(RuntimeInformation.FrameworkDescription);
+        _JValue* args = stackalloc _JValue[] { new _JValue((_JObject)version), new _JValue((_JObject)dotnet) };
+        env.CallStaticVoidMethod(info, setHost, args);
+        env.DeleteLocalRef((_JObject)version);
+        env.DeleteLocalRef((_JObject)dotnet);
+    }
 
     private static string Version =>
         typeof(Entry).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
