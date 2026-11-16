@@ -10,8 +10,9 @@ internal sealed unsafe class LuaBridge : ILuaHost
 {
     public static readonly LuaBridge Instance = new();
 
-    private static _JClass _wrenchLua, _object;
-    private static _JMethodID _getGlobal, _setGlobal, _index, _setIndex, _isTable, _newTable, _call, _callMethod, _function;
+    private static _JClass _wrenchLua, _object, _system;
+    private static _JMethodID _getGlobal, _setGlobal, _index, _setIndex, _isTable, _newTable, _call, _callMethod, _function,
+        _identityHashCode;
 
     public static void Initialize(JavaRuntime runtime)
     {
@@ -20,6 +21,10 @@ internal sealed unsafe class LuaBridge : ILuaHost
         var objectClass = env.FindClass("java/lang/Object");
         _object = env.NewGlobalRef(objectClass).AsClass();
         env.DeleteLocalRef(objectClass);
+        var systemClass = env.FindClass("java/lang/System");
+        _system = env.NewGlobalRef(systemClass).AsClass();
+        env.DeleteLocalRef(systemClass);
+        _identityHashCode = env.GetStaticMethodId(_system, "identityHashCode", "(Ljava/lang/Object;)I");
 
         _getGlobal = Static(env, "getGlobal", "(Ljava/lang/String;)Ljava/lang/Object;");
         _setGlobal = Static(env, "setGlobal", "(Ljava/lang/String;Ljava/lang/Object;)V");
@@ -104,6 +109,22 @@ internal sealed unsafe class LuaBridge : ILuaHost
     {
         var scope = LuaScope.Current;
         return new GameObject(scope, NewFunction(scope.Env, mod, function).Value);
+    }
+
+    public GameObject Keep(GameObject target)
+    {
+        var env = LuaScope.Current.Env;
+        return new GameObject(new KeptScope(), env.NewGlobalRef(new _JObject(target.Handle)).Value);
+    }
+
+    public bool SameObject(GameObject a, GameObject b) =>
+        LuaScope.Current.Env.IsSameObject(new _JObject(a.Handle), new _JObject(b.Handle));
+
+    public int IdentityHash(GameObject target)
+    {
+        var env = LuaScope.Current.Env;
+        _JValue* args = stackalloc _JValue[] { new _JValue(new _JObject(target.Handle)) };
+        return env.CallStaticIntMethod(_system, _identityHashCode, args);
     }
 
     /// <summary>Converts a .NET value for Lua. New local refs are recorded in <paramref name="temps"/>; game objects are borrowed.</summary>
@@ -234,6 +255,26 @@ internal sealed unsafe class LuaBridge : ILuaHost
 
     private static _JMethodID Static(JNIEnv env, string name, string signature) =>
         env.GetStaticMethodId(_wrenchLua, name, signature);
+
+    /// <summary>Backs <see cref="GameObject.Keep"/>: a JNI global ref, valid until disposed.</summary>
+    private sealed class KeptScope : IGameObjectScope
+    {
+        public bool IsActive { get; private set; } = true;
+
+        public int ThreadId { get; } = Environment.CurrentManagedThreadId;
+
+        public string GetTypeName(nint handle) => JavaBoxing.GetClassName(LuaScope.Current.Env, new _JObject(handle));
+
+        public string Describe(nint handle) => JavaBoxing.ToJavaString(LuaScope.Current.Env, new _JObject(handle));
+
+        public void Release(nint handle)
+        {
+            if (!IsActive)
+                return;
+            IsActive = false;
+            Entry.CurrentEnv().DeleteGlobalRef(new _JObject(handle));
+        }
+    }
 
     /// <summary>Local refs created while converting arguments, released once the call is done.</summary>
     internal sealed class Temps(JNIEnv env) : IDisposable

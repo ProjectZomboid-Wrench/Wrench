@@ -40,7 +40,7 @@ public sealed class LuaInteropMod : ModInstance
         player.getInventory().clear();
         player.setClothingItem_Feet(null);
 
-        var rooms = Lua.GetGlobal("ArrayList")!.@new();
+        var rooms = Lua.GetGlobal("ArrayList")!.Dot.@new();
         rooms.add("kitchen");
         Log.Info($"AddPlayer({playerNum}) rooms={rooms.size()} player={player}");
 

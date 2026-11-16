@@ -8,17 +8,66 @@ import zombie.Lua.LuaManager;
 
 // Plays PZ's part: sets up Lua globals, fires OnChallengeQuery, then drives the challenge like ChallengeData does.
 public final class LuaDriver {
-    public static void run() {
+    private static final ArrayList<KahluaTable> challenges = new ArrayList<>();
+
+    /** A fresh Lua state, as PZ has after (re)loading its scripts. */
+    public static void setup(String originalOption) {
         LuaManager.platform = new J2SEPlatform();
         LuaManager.thread = new KahluaThread();
         LuaManager.env = LuaManager.platform.newTable();
         var env = LuaManager.env;
 
-        var challenges = new ArrayList<KahluaTable>();
         env.rawset("addChallenge", (JavaFunction) (frame, n) -> {
             challenges.add((KahluaTable) frame.get(0));
             return 0;
         });
+
+        var menu = table();
+        menu.rawset("createMenu", (JavaFunction) (frame, n) -> {
+            var options = new ArrayList<Object>();
+            options.add(originalOption);
+            return frame.push(options);
+        });
+        env.rawset("ContextMenuBuilder", menu);
+
+        var tutorial = table();
+        tutorial.rawset("lockDoor", (JavaFunction) (frame, n) -> frame.push("locked in Lua"));
+        env.rawset("Tutorial1", tutorial);
+
+        // A Lua OOP-style object: its methods expect self as the first argument.
+        var steps = table();
+        var step = new StringBuilder("WelcomeStep");
+        steps.rawset("get", (JavaFunction) (frame, n) -> {
+            if (frame.get(0) != steps)
+                throw new RuntimeException("steps:get called without self");
+            return frame.push(step);
+        });
+        env.rawset("Steps", steps);
+
+        var items = table();
+        items.rawset(1.0, "a");
+        items.rawset(2.0, "b");
+        items.rawset(3.0, "c");
+        env.rawset("Items", items);
+    }
+
+    /** Calls the patched functions the way PZ's UI code would. */
+    public static void callPatched(String player) {
+        var menu = (KahluaTable) LuaManager.env.rawget("ContextMenuBuilder");
+        System.out.println("createMenu -> " + call(menu, "createMenu", player));
+        var tutorial = (KahluaTable) LuaManager.env.rawget("Tutorial1");
+        System.out.println("lockDoor -> " + call(tutorial, "lockDoor", 131.0, 181.0, 0.0));
+    }
+
+    /** Like Core.ResetLua: every global is recreated, then OnGameBoot fires again. */
+    public static void reload() {
+        setup("reloaded original");
+        new Event("OnGameBoot").trigger(null, null, new Object[] {"hi", 42, null, new StringBuilder("sb")});
+    }
+
+    public static void run() {
+        var env = LuaManager.env;
+
         var sandbox = table();
         sandbox.rawset("ZombieConfig", table());
         env.rawset("SandboxVars", sandbox);

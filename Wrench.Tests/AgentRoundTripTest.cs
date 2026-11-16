@@ -80,6 +80,32 @@ public class AgentRoundTripTest
     }
 
     [TestMethod]
+    public void Mods_Wrap_And_Replace_Existing_Lua_Functions()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "createMenu -> [original option, .NET option for player0]");
+        StringAssert.Contains(output, "lockDoor -> locked 131,181,0 in .NET");
+    }
+
+    [TestMethod]
+    public void Patches_Are_Reapplied_After_Lua_Reloads()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "createMenu -> [reloaded original, .NET option for player1]");
+        Assert.AreEqual(2, output.Split("[Wrench.Tests.SampleMod] INFO: patched;").Length - 1);
+    }
+
+    [TestMethod]
+    public void Dynamic_Calls_Follow_Lua_Colon_Semantics()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "patched; steps.get(0)=WelcomeStep same=True items=a,b,c truthy=False/True/False");
+    }
+
+    [TestMethod]
     public void Log_Level_Filters_Host_And_Mod_Output()
     {
         var output = RunHello(new() { ["WRENCH_LOG_LEVEL"] = "Error" });

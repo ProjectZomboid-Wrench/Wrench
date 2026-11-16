@@ -1,0 +1,30 @@
+using Wrench;
+
+namespace Wrench.Tests.SampleMod;
+
+/// <summary>Wraps and replaces existing Lua functions; driven by the test's LuaDriver.</summary>
+public sealed class PatchingMod : ModInstance
+{
+    public override void OnLoad() => PatchLua(Patch);
+
+    private void Patch()
+    {
+        if (Lua.GetGlobal("ContextMenuBuilder") is null)
+            return;
+
+        Lua.Wrap("ContextMenuBuilder.createMenu", call =>
+        {
+            var options = call.CallOriginal()!;
+            options.add($".NET option for {call.Args[0]}");
+            return options;
+        });
+        Lua.Replace("Tutorial1.lockDoor", (int x, int y, int z) => $"locked {x},{y},{z} in .NET");
+
+        var steps = Lua.GetGlobal("Steps")!;
+        var first = steps.get(0);
+        var again = steps.get(0);
+        var items = string.Join(",", Lua.GetGlobal("Items")!.Sequence());
+        Log.Info($"patched; steps.get(0)={first} same={first == again} items={items} " +
+                 $"truthy={Lua.Truthy(false)}/{Lua.Truthy(0)}/{Lua.Truthy(null)}");
+    }
+}

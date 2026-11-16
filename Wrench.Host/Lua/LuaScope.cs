@@ -38,6 +38,10 @@ internal sealed class LuaScope : IGameObjectScope, IDisposable
 
     public string Describe(nint handle) => JavaBoxing.ToJavaString(Env, new _JObject(handle));
 
+    public void Release(nint handle)
+    {
+    }
+
     public void Dispose()
     {
         IsActive = false;
