@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using JNIBinding;
 using JNIBinding.Bindings.Native.Types;
+using Wrench.Host.Logging;
 using Wrench.Host.Mods;
 
 namespace Wrench.Host.Lua;
@@ -11,11 +12,13 @@ namespace Wrench.Host.Lua;
 /// <summary>Delegates exposed to Lua as <c>io.pznet.wrench.DotnetFunction</c>s, keyed by id.</summary>
 internal static class LuaFunctions
 {
-    private static readonly ConcurrentDictionary<long, (ModInstance Mod, Delegate Function)> Functions = new();
+    // A null owner means Wrench's own functions, such as WrenchHost.decide.
+    private static readonly ConcurrentDictionary<long, (ModInstance? Mod, Delegate Function)> Functions = new();
+    private static readonly Logger Log = Logging.Log.For("Wrench.Host");
     private static long _lastId;
 
     // Entries are never removed: Lua may keep a function alive indefinitely, and there are few of them.
-    public static long Register(ModInstance mod, Delegate function)
+    public static long Register(ModInstance? mod, Delegate function)
     {
         var id = Interlocked.Increment(ref _lastId);
         Functions[id] = (mod, function);
@@ -45,9 +48,12 @@ internal static class LuaFunctions
         catch (Exception e)
         {
             var error = e is TargetInvocationException { InnerException: { } inner } ? inner : e;
-            ModHost.Instance.Log(entry.Mod, LogLevel.Error, $"Lua call into {Describe(entry.Function)} failed", error);
+            if (entry.Mod is null)
+                Log.Error($"Lua call into {Describe(entry.Function)} failed", error);
+            else
+                ModHost.Instance.Log(entry.Mod, LogLevel.Error, $"Lua call into {Describe(entry.Function)} failed", error);
             // Raised in Lua as an error from this function, as a failing Lua function would be.
-            Entry.ThrowToJava(jEnv, $"{entry.Mod.Id}: {error.Message}");
+            Entry.ThrowToJava(jEnv, $"{entry.Mod?.Id ?? "Wrench"}: {error.Message}");
             return IntPtr.Zero;
         }
     }

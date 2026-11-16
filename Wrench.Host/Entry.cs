@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using JNIBinding;
 using JNIBinding.Bindings;
@@ -6,6 +7,7 @@ using Wrench.Host.Events;
 using Wrench.Host.Logging;
 using Wrench.Host.Lua;
 using Wrench.Host.Mods;
+using Wrench.Host.Security;
 
 namespace Wrench.Host;
 
@@ -51,7 +53,10 @@ public static unsafe class Entry
                     (delegate* unmanaged<IntPtr, IntPtr, IntPtr, IntPtr, void>)&LuaEventRouter.OnLuaEvent)
                 .Add("invokeFunction", "(J[Ljava/lang/Object;)[Ljava/lang/Object;",
                     (delegate* unmanaged<IntPtr, IntPtr, long, IntPtr, IntPtr>)&LuaFunctions.Invoke)
+                .Add("onPermissionDecision", "(Ljava/lang/String;Z)V",
+                    (delegate* unmanaged<IntPtr, IntPtr, IntPtr, byte, void>)&PermissionPrompt.OnPermissionDecision)
                 .Complete();
+            PermissionPrompt.Initialize(runtime);
 
             LuaBridge.Initialize(runtime);
             LuaHost.Instance = LuaBridge.Instance;
@@ -63,7 +68,9 @@ public static unsafe class Entry
             Log.Info($"Attached to {vm}");
 
             var mods = ModLoader.LoadAll(ModsDirectory());
-            Log.Info($"{mods.Count} mod(s) loaded");
+            Log.Info($"{mods.Count} Wrench-local mod(s) loaded");
+            LuaEventRouter.AddHostHook(LuaEvents.OnGameBoot, AnnounceToLua);
+            LuaEventRouter.AddHostHook(LuaEvents.OnGameBoot, () => PzMods.Sync(LuaBridge.Instance));
             return Attached;
         }
         catch (Exception e)
@@ -72,6 +79,14 @@ public static unsafe class Entry
             return Failed;
         }
     }
+
+    // Lets Lua (notably the Wrench PZ metamod) detect the loader. Host hooks run before Lua's own OnGameBoot callbacks.
+    private static void AnnounceToLua() =>
+        LuaBridge.Instance.SetHostGlobal("WrenchHost", new Dictionary<string, object?> { ["version"] = Version });
+
+    private static string Version =>
+        typeof(Entry).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
+        ?? "unknown";
 
     /// <summary>The calling thread's JNIEnv, attaching .NET-owned threads as daemons on first use.</summary>
     internal static JNIEnv CurrentEnv() =>

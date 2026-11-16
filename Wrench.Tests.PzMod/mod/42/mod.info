@@ -1,0 +1,5 @@
+name=Wrench Test Mod
+id=WrenchTestMod
+description=Packaged as a regular PZ mod; loaded by Wrench through mod.info.
+dotnet=dotnet/Wrench.Tests.PzMod.dll
+require=\Wrench

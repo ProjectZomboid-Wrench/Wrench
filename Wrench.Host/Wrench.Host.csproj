@@ -7,7 +7,13 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <!-- Emits Wrench.Host.runtimeconfig.json and copies dependencies, as hostfxr needs to load it as a component. -->
         <EnableDynamicLoading>true</EnableDynamicLoading>
+        <Version>0.1.0</Version>
     </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.ILVerification" Version="10.0.15" />
+        <InternalsVisibleTo Include="Wrench.Host.Tests" />
+    </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\JNIBinding\src\JNIBinding\JNIBinding.csproj" />

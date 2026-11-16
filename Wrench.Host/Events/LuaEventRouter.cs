@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Runtime.InteropServices;
 using JNIBinding;
 using JNIBinding.Bindings.Native.Types;
+using Wrench.Host.Logging;
 using Wrench.Host.Lua;
 using Wrench.Host.Mods;
 
@@ -11,10 +12,29 @@ namespace Wrench.Host.Events;
 /// <summary>Routes Lua events from the agent's hook to mod handlers, keeping the agent's subscription set in sync.</summary>
 internal static unsafe class LuaEventRouter
 {
+    private static readonly Logger Log = Logging.Log.For("Wrench.Host");
+
     private sealed record Registration(ModInstance Mod, Action<LuaEventArgs> Handler);
 
     private static readonly ConcurrentDictionary<string, ImmutableArray<Registration>> Handlers = new();
+    private static readonly ConcurrentDictionary<string, ImmutableArray<Action>> HostHooks = new();
     private static readonly Lock Gate = new();
+
+    /// <summary>
+    /// Runs <paramref name="hook"/> on <paramref name="eventName"/> before any mod handler, and before the handler list
+    /// is read, so mods the hook loads receive the same event.
+    /// </summary>
+    public static void AddHostHook(string eventName, Action hook)
+    {
+        bool first;
+        lock (Gate)
+        {
+            first = !Handlers.ContainsKey(eventName) && !HostHooks.ContainsKey(eventName);
+            HostHooks[eventName] = HostHooks.GetValueOrDefault(eventName, []).Add(hook);
+        }
+        if (first)
+            SetAgentSubscription(eventName, subscribe: true);
+    }
 
     public static IDisposable Register(ModInstance mod, string eventName, Action<LuaEventArgs> handler)
     {
@@ -23,12 +43,38 @@ internal static unsafe class LuaEventRouter
         lock (Gate)
         {
             var existing = Handlers.GetValueOrDefault(eventName, []);
-            first = existing.IsEmpty;
+            first = existing.IsEmpty && !HostHooks.ContainsKey(eventName);
             Handlers[eventName] = existing.Add(registration);
         }
         if (first)
             SetAgentSubscription(eventName, subscribe: true);
         return new Unregistration(() => Unregister(eventName, registration));
+    }
+
+    /// <summary>
+    /// Runs <paramref name="mods"/>' handlers for <paramref name="eventName"/> now, inside the current Lua call. For mods
+    /// loaded after the event already fired, such as ones approved from the main menu after OnGameBoot.
+    /// </summary>
+    public static void InvokeNow(string eventName, IReadOnlyCollection<ModInstance> mods)
+    {
+        if (!Handlers.TryGetValue(eventName, out var registrations))
+            return;
+        var scope = LuaScope.Current;
+        var previous = scope.Mod;
+        var eventArgs = new LuaEventArgs(eventName, []);
+        foreach (var registration in registrations.Where(r => r.Mod.IsActive && mods.Contains(r.Mod)))
+        {
+            scope.Mod = registration.Mod;
+            try
+            {
+                registration.Handler(eventArgs);
+            }
+            catch (Exception e)
+            {
+                ModHost.Instance.Log(registration.Mod, LogLevel.Error, $"{eventName} handler failed", e);
+            }
+        }
+        scope.Mod = previous;
     }
 
     private static void Unregister(string eventName, Registration registration)
@@ -39,7 +85,7 @@ internal static unsafe class LuaEventRouter
             if (!Handlers.TryGetValue(eventName, out var existing))
                 return;
             var remaining = existing.Remove(registration);
-            last = remaining.IsEmpty && !existing.IsEmpty;
+            last = remaining.IsEmpty && !existing.IsEmpty && !HostHooks.ContainsKey(eventName);
             if (remaining.IsEmpty)
                 Handlers.TryRemove(eventName, out _);
             else
@@ -67,13 +113,30 @@ internal static unsafe class LuaEventRouter
         try
         {
             var eventName = jEnv.AsString(new _JString(name));
-            if (!Handlers.TryGetValue(eventName, out var registrations) || registrations.IsEmpty)
+            var hooks = HostHooks.GetValueOrDefault(eventName, []);
+            if (hooks.IsEmpty && !Handlers.ContainsKey(eventName))
                 return;
 
             using var scope = LuaScope.Enter(jEnv, mod: null);
+            foreach (var hook in hooks)
+            {
+                try
+                {
+                    hook();
+                }
+                catch (Exception e)
+                {
+                    Log.Error($"Host hook for {eventName} failed", e);
+                }
+            }
+
+            if (!Handlers.TryGetValue(eventName, out var registrations) || registrations.IsEmpty)
+                return;
             var eventArgs = new LuaEventArgs(eventName, JavaValues.ToDotnet(jEnv, new _JObjectArray(args), scope));
             foreach (var registration in registrations)
             {
+                if (!registration.Mod.IsActive)
+                    continue;
                 scope.Mod = registration.Mod;
                 try
                 {

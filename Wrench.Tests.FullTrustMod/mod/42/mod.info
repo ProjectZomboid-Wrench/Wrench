@@ -1,0 +1,6 @@
+name=Wrench Full Trust Test Mod
+id=WrenchFullTrustMod
+description=Uses APIs restricted mods can't, so it declares full trust and waits for the player.
+dotnet=dotnet/Wrench.Tests.FullTrustMod.dll
+dotnetPermissions=full
+require=\Wrench

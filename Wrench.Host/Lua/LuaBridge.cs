@@ -54,6 +54,16 @@ internal sealed unsafe class LuaBridge : ILuaHost
         Guard(() => CallVoid(scope.Env, _setGlobal, jName, jValue));
     }
 
+    /// <summary>Sets a global on Wrench's own behalf; values may not contain delegates, which need an owning mod.</summary>
+    public void SetHostGlobal(string name, object? value)
+    {
+        var scope = LuaScope.Current;
+        using var temps = new Temps(scope.Env);
+        var jName = temps.String(name);
+        var jValue = ToJava(scope, value, null, temps);
+        Guard(() => CallVoid(scope.Env, _setGlobal, jName, jValue));
+    }
+
     public object? Index(GameObject target, object key)
     {
         var scope = LuaScope.Current;
@@ -145,8 +155,8 @@ internal sealed unsafe class LuaBridge : ILuaHost
                 // Lua has one number type; Kahlua converts it back to whatever a Java method parameter needs.
                 return temps.Add(JavaBoxing.Box(env, Convert.ToDouble(value)));
             case Delegate function:
-                return temps.Add(NewFunction(env, mod ?? scope.Mod
-                    ?? throw new InvalidOperationException("No mod owns this function"), function));
+                // Owned by the calling mod; with neither a mod nor a mod scope it is one of Wrench's own functions.
+                return temps.Add(NewFunction(env, mod ?? scope.Mod, function));
             case IDictionary dictionary:
             {
                 var table = temps.Add(Guard(() => CallObject(env, _newTable)));
@@ -176,7 +186,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
     }
 
     /// <summary>Builds a Java <c>Object[]</c> for <paramref name="values"/>; the array itself is not recorded as a temp.</summary>
-    public static _JObjectArray NewResultArray(LuaScope scope, object?[] values, ModInstance mod)
+    public static _JObjectArray NewResultArray(LuaScope scope, object?[] values, ModInstance? mod)
     {
         using var temps = new Temps(scope.Env);
         return BuildArray(scope, values, mod, temps);
@@ -194,7 +204,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
         return array;
     }
 
-    private static _JObject NewFunction(JNIEnv env, ModInstance mod, Delegate function)
+    private static _JObject NewFunction(JNIEnv env, ModInstance? mod, Delegate function)
     {
         var id = LuaFunctions.Register(mod, function);
         _JValue* args = stackalloc _JValue[] { new _JValue(id) };

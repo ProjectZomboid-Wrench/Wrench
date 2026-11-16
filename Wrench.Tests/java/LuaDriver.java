@@ -1,4 +1,6 @@
+import java.io.File;
 import java.util.ArrayList;
+import java.util.List;
 import se.krka.kahlua.j2se.J2SEPlatform;
 import se.krka.kahlua.vm.JavaFunction;
 import se.krka.kahlua.vm.KahluaTable;
@@ -9,6 +11,7 @@ import zombie.Lua.LuaManager;
 // Plays PZ's part: sets up Lua globals, fires OnChallengeQuery, then drives the challenge like ChallengeData does.
 public final class LuaDriver {
     private static final ArrayList<KahluaTable> challenges = new ArrayList<>();
+    private static List<String> activeMods = List.of("PlainLuaMod", "WrenchTestMod", "WrenchFullTrustMod");
 
     /** A fresh Lua state, as PZ has after (re)loading its scripts. */
     public static void setup(String originalOption) {
@@ -49,6 +52,55 @@ public final class LuaDriver {
         items.rawset(2.0, "b");
         items.rawset(3.0, "c");
         env.rawset("Items", items);
+
+        env.rawset("getActivatedMods", (JavaFunction) (frame, n) -> frame.push(new ArrayList<>(activeMods)));
+        env.rawset("getModInfoByID", (JavaFunction) (frame, n) -> frame.push(modInfo((String) frame.get(0))));
+        env.rawset("getMyDocumentFolder", (JavaFunction) (frame, n) -> frame.push(System.getProperty("wrench.test.home")));
+    }
+
+    private static FakeModInfo modInfo(String id) {
+        var root = new File(System.getProperty("wrench.test.pzmods"), id);
+        return root.isDirectory() ? new FakeModInfo(root) : null;
+    }
+
+    /**
+     * Lists the agent's pending permission requests and answers for WrenchFullTrustMod through
+     * WrenchPermissions.decide, the path the prompt game state uses. Also shows Lua has nothing to call.
+     */
+    public static void trustFlow() throws ReflectiveOperationException {
+        var permissions = Class.forName("io.pznet.wrench.WrenchPermissions");
+        for (var request : (java.util.List<?>) permissions.getMethod("pending").invoke(null)) {
+            var id = request.getClass().getMethod("id").invoke(request);
+            var descriptions = (String[]) request.getClass().getMethod("descriptions").invoke(request);
+            System.out.println("pending: " + id + " [" + descriptions[0] + "]");
+        }
+
+        var host = (KahluaTable) LuaManager.env.rawget("WrenchHost");
+        System.out.println("lua can decide: " + (host.rawget("decide") != null) + ", lua sees pending: " + (host.rawget("pending") != null));
+
+        var decision = System.getProperty("wrench.test.decision");
+        if (decision == null)
+            return;
+        var decide = permissions.getDeclaredMethod("decide", String.class, boolean.class);
+        decide.setAccessible(true);
+        decide.invoke(null, "WrenchFullTrustMod", decision.equals("allow"));
+        System.out.println("decided " + decision);
+    }
+
+    /** Enables, disables and re-enables WrenchTestMod across Lua reloads, pinging it each time. */
+    public static void pzModLifecycle() {
+        ping();
+        activeMods = List.of("PlainLuaMod");
+        reload();
+        ping();
+        activeMods = List.of("PlainLuaMod", "WrenchTestMod");
+        reload();
+        ping();
+    }
+
+    private static void ping() {
+        System.out.println("pinging with active mods " + activeMods);
+        new Event("OnTestPing").trigger(null, null, new Object[0]);
     }
 
     /** Calls the patched functions the way PZ's UI code would. */
@@ -67,6 +119,8 @@ public final class LuaDriver {
 
     public static void run() {
         var env = LuaManager.env;
+        var host = (KahluaTable) env.rawget("WrenchHost");
+        System.out.println("WrenchHost.version=" + (host == null ? "missing" : host.rawget("version")));
 
         var sandbox = table();
         sandbox.rawset("ZombieConfig", table());
