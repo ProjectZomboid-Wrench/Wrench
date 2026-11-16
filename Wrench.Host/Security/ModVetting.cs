@@ -14,7 +14,7 @@ internal static class ModVetting
     private const int MaxReported = 10;
 
     private static readonly string FrameworkDirectory = RuntimeEnvironment.GetRuntimeDirectory();
-    private static readonly string[] HostAssemblies = ["Wrench.Api", "Wrench.Host", "JNIBinding", "ILVerification"];
+    private static readonly string[] HostAssemblies = ["Wrench.Api", "Wrench.Game", "Wrench.Host", "JNIBinding", "ILVerification"];
 
     public static List<string> Vet(string assemblyPath)
     {
@@ -75,7 +75,12 @@ internal static class ModVetting
             if (_open.TryGetValue(name, out var reader))
                 return reader;
             var path = mod.GetValueOrDefault(name) ?? framework.GetValueOrDefault(name)
-                       ?? (name == "Wrench.Api" ? typeof(ModInstance).Assembly.Location : null);
+                       ?? name switch
+                       {
+                           "Wrench.Api" => typeof(ModInstance).Assembly.Location,
+                           "Wrench.Game" => typeof(Zomboid.JavaObject).Assembly.Location,
+                           _ => null,
+                       };
             if (path is null)
                 return null;
             return _open[name] = new PEReader(File.OpenRead(path));

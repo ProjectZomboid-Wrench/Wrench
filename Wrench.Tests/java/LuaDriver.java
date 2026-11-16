@@ -133,6 +133,14 @@ public final class LuaDriver {
         System.out.println("OnCreate " + functionName + " -> " + result[0] + " " + craftData.log);
     }
 
+    /** Calls a .NET function taking a typed JavaList with a real java.util.ArrayList. */
+    public static void typedCall(String functionName) {
+        var functions = (KahluaTable) LuaManager.env.rawget("WrenchTest");
+        var items = new ArrayList<Object>(List.of("rice", "plate"));
+        var result = LuaManager.thread.pcall(functions.rawget(functionName), new Object[] {items});
+        System.out.println("typed " + functionName + " -> " + result[0] + " " + items);
+    }
+
     /** Like Core.ResetLua: every global is recreated, then OnGameBoot fires again. */
     public static void reload() {
         setup("reloaded original");

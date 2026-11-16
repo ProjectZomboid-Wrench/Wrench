@@ -13,6 +13,9 @@ namespace Wrench.Host.Security;
 /// </summary>
 internal sealed class AssemblyInspector(IReadOnlySet<string> modAssemblyNames)
 {
+    // The API a mod is meant to use: everything in it goes through Kahlua, as Lua's access does.
+    private static readonly HashSet<string> WrenchAssemblies = ["Wrench.Api", "Wrench.Game"];
+
     private const string BinderType = "Microsoft.CSharp.RuntimeBinder.Binder";
     private const string TypeType = "System.Type";
 
@@ -133,7 +136,7 @@ internal sealed class AssemblyInspector(IReadOnlySet<string> modAssemblyNames)
         if (top.ResolutionScope.Kind != HandleKind.AssemblyReference)
             return false;
         var assembly = md.GetString(md.GetAssemblyReference((AssemblyReferenceHandle)top.ResolutionScope).Name);
-        return !modAssemblyNames.Contains(assembly);
+        return !modAssemblyNames.Contains(assembly) && !WrenchAssemblies.Contains(assembly);
     }
 
     private string? ParentTypeName(MetadataReader md, EntityHandle parent)

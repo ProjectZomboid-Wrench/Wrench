@@ -18,6 +18,7 @@
         <ProjectReference Include="..\Wrench.Host\Wrench.Host.csproj" />
         <!-- Built so their outputs can be vetted as real-world mods. -->
         <ProjectReference Include="..\Wrench.Samples.ReallyCDDAy\Wrench.Samples.ReallyCDDAy.csproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Wrench.Samples.GourmetDishes\Wrench.Samples.GourmetDishes.csproj" ReferenceOutputAssembly="false" />
         <ProjectReference Include="..\Wrench.Samples.Tutorial\Wrench.Samples.Tutorial.csproj" ReferenceOutputAssembly="false" />
     </ItemGroup>
 

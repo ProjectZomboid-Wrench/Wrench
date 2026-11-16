@@ -18,6 +18,7 @@
     <ItemGroup>
         <ProjectReference Include="..\JNIBinding\src\JNIBinding\JNIBinding.csproj" />
         <ProjectReference Include="..\Wrench.Api\Wrench.Api.csproj" />
+        <ProjectReference Include="..\Wrench.Game\Wrench.Game.csproj" />
     </ItemGroup>
 
 </Project>

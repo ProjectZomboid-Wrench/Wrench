@@ -118,6 +118,7 @@ public class ModVettingTest
 
     [TestMethod]
     [DataRow("Wrench.Samples.ReallyCDDAy", "pzmod/WrenchReallyCDDAy/42/dotnet/Wrench.Samples.ReallyCDDAy.dll")]
+    [DataRow("Wrench.Samples.GourmetDishes", "pzmod/WrenchGourmetDishes/42/dotnet/Wrench.Samples.GourmetDishes.dll")]
     [DataRow("Wrench.Samples.Tutorial", "Wrench.Samples.Tutorial.dll")]
     public void Sample_Mods_Pass(string project, string assembly)
     {

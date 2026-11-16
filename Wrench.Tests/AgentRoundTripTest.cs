@@ -106,6 +106,14 @@ public class AgentRoundTripTest
     }
 
     [TestMethod]
+    public void Generated_Wrappers_Bind_Typed_Parameters()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "typed Typed -> true [rice, plate, typed: count=2 first=rice upper=RICE|PLATE]");
+    }
+
+    [TestMethod]
     public void Dynamic_Calls_Follow_Lua_Colon_Semantics()
     {
         var output = RunHello();

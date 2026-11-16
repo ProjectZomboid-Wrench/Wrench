@@ -88,14 +88,16 @@ internal static class ModLoader
 
     private sealed class ModLoadContext(string id, string assemblyPath) : AssemblyLoadContext(id)
     {
-        private static readonly Assembly ApiAssembly = typeof(ModInstance).Assembly;
+        private static readonly Assembly[] SharedAssemblies = [typeof(ModInstance).Assembly, typeof(Zomboid.JavaObject).Assembly];
         private readonly AssemblyDependencyResolver _resolver = new(assemblyPath);
 
         protected override Assembly? Load(AssemblyName name)
         {
-            // Every mod must bind to the host's Wrench.Api, or ModInstance would be a different type per mod.
-            if (name.Name == ApiAssembly.GetName().Name)
-                return ApiAssembly;
+            // Every mod must bind to the host's Wrench.Api and Wrench.Game, or ModInstance (and every game wrapper)
+            // would be a different type per mod.
+            var shared = SharedAssemblies.FirstOrDefault(a => a.GetName().Name == name.Name);
+            if (shared is not null)
+                return shared;
             var path = _resolver.ResolveAssemblyToPath(name);
             return path is null ? null : LoadFromAssemblyPath(path);
         }

@@ -76,6 +76,8 @@ internal static class LuaFunctions
             return type.IsValueType && Nullable.GetUnderlyingType(type) is null ? Activator.CreateInstance(type) : null;
         if (type.IsInstanceOfType(value))
             return value;
+        if (value is GameObject handle && typeof(Zomboid.JavaObject).IsAssignableFrom(type))
+            return Zomboid.JavaConvert.To(handle, type);
         var target = Nullable.GetUnderlyingType(type) ?? type;
         if (value is IConvertible convertible && typeof(IConvertible).IsAssignableFrom(target))
             return convertible.ToType(target, CultureInfo.InvariantCulture);
