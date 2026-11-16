@@ -19,6 +19,8 @@ public sealed class PatchingMod : ModInstance
             return options;
         });
         Lua.Replace("Tutorial1.lockDoor", (int x, int y, int z) => $"locked {x},{y},{z} in .NET");
+        Lua.Define("WrenchTest.OnCreate.MakePlate", (dynamic craftData, dynamic character) =>
+            craftData.addLog($"plated in .NET after {character.getHoursSurvived()} hours"));
 
         var steps = Lua.GetGlobal("Steps")!;
         var first = steps.get(0);

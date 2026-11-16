@@ -111,6 +111,28 @@ public final class LuaDriver {
         System.out.println("lockDoor -> " + call(tutorial, "lockDoor", 131.0, 181.0, 0.0));
     }
 
+    /**
+     * Runs a craftRecipe's OnCreate the way B42 does: LuaManager.getFunctionObject walks the dotted name through
+     * tables and accepts a JavaFunction or LuaClosure, then CraftRecipeData calls it with itself and the character.
+     */
+    public static void craftOnCreate(String functionName) {
+        Object current = LuaManager.env;
+        for (var part : functionName.split("\\.")) {
+            if (!(current instanceof KahluaTable table)) {
+                System.out.println("no such function \"" + functionName + "\"");
+                return;
+            }
+            current = table.rawget(part);
+        }
+        if (!(current instanceof JavaFunction)) {
+            System.out.println("no such function \"" + functionName + "\"");
+            return;
+        }
+        var craftData = new FakeCraftRecipeData();
+        var result = LuaManager.thread.pcall(current, new Object[] {craftData, new FakePlayer()});
+        System.out.println("OnCreate " + functionName + " -> " + result[0] + " " + craftData.log);
+    }
+
     /** Like Core.ResetLua: every global is recreated, then OnGameBoot fires again. */
     public static void reload() {
         setup("reloaded original");

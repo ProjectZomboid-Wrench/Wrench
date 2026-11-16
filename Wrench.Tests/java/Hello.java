@@ -12,6 +12,7 @@ public class Hello {
         LuaDriver.callPatched("player0");
         LuaDriver.reload();
         LuaDriver.callPatched("player1");
+        LuaDriver.craftOnCreate("WrenchTest.OnCreate.MakePlate");
         LuaDriver.pzModLifecycle();
     }
 }

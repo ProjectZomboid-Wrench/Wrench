@@ -98,6 +98,14 @@ public class AgentRoundTripTest
     }
 
     [TestMethod]
+    public void Script_Callbacks_Resolve_To_Functions_Defined_In_Dotnet()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "OnCreate WrenchTest.OnCreate.MakePlate -> true [plated in .NET after 0 hours]");
+    }
+
+    [TestMethod]
     public void Dynamic_Calls_Follow_Lua_Colon_Semantics()
     {
         var output = RunHello();
