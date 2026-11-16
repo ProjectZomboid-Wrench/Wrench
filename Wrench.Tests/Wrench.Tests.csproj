@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <JavaBin Condition="'$(JAVA_HOME)' != ''">$(JAVA_HOME)/bin/</JavaBin>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+        <PackageReference Include="MSTest.TestAdapter" Version="4.0.2" />
+        <PackageReference Include="MSTest.TestFramework" Version="4.0.2" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Wrench.Agent\Wrench.Agent.csproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Wrench.Host\Wrench.Host.csproj" ReferenceOutputAssembly="false" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <JavaSource Include="java/**/*.java" />
+    </ItemGroup>
+
+    <!-- Lays out dist/ the way it ships: wrench-agent.jar with Wrench.Host in host/ beside it. -->
+    <Target Name="StageWrenchDist" AfterTargets="Build">
+        <PropertyGroup>
+            <WrenchDistDir>$(OutDir)dist/</WrenchDistDir>
+        </PropertyGroup>
+        <ItemGroup>
+            <AgentJar Include="$(MSBuildThisFileDirectory)../Wrench.Agent/bin/$(Configuration)/net10.0/*.jar" />
+            <HostFiles Include="$(MSBuildThisFileDirectory)../Wrench.Host/bin/$(Configuration)/net10.0/**/*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(AgentJar)" DestinationFolder="$(WrenchDistDir)" SkipUnchangedFiles="true" />
+        <Copy SourceFiles="@(HostFiles)" DestinationFolder="$(WrenchDistDir)host/%(RecursiveDir)" SkipUnchangedFiles="true" />
+    </Target>
+
+    <Target Name="CompileJavaFixtures" AfterTargets="Build" Inputs="@(JavaSource)" Outputs="$(OutDir)classes/.stamp">
+        <MakeDir Directories="$(OutDir)classes" />
+        <Exec Command="&quot;$(JavaBin)javac&quot; --release 22 -d &quot;$(OutDir)classes&quot; @(JavaSource->'&quot;%(FullPath)&quot;', ' ')" />
+        <Touch Files="$(OutDir)classes/.stamp" AlwaysCreate="true" />
+    </Target>
+
+</Project>

@@ -1,0 +1,2 @@
+Premain-Class: io.pznet.wrench.WrenchAgent
+Class-Path: byte-buddy-1.18.17.jar

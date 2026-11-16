@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.Build.NoTargets/3.7.134">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <JavaBin Condition="'$(JAVA_HOME)' != ''">$(JAVA_HOME)/bin/</JavaBin>
+        <!-- FFM is final from 22; PZ ships 25. -->
+        <JavaRelease>22</JavaRelease>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <JavaSource Include="src/**/*.java" />
+        <None Include="MANIFEST.MF" />
+        <!-- Shipped beside wrench-agent.jar and referenced from MANIFEST.MF's Class-Path; keep the two in sync. -->
+        <AgentLibrary Include="lib/*.jar" />
+    </ItemGroup>
+
+    <!-- OutDir/IntermediateOutputPath are only defined after the implicit SDK targets import. -->
+    <Target Name="ResolveAgentPaths">
+        <PropertyGroup>
+            <AgentClassesDir>$(IntermediateOutputPath)classes/</AgentClassesDir>
+            <AgentJar>$(OutDir)wrench-agent.jar</AgentJar>
+        </PropertyGroup>
+    </Target>
+
+    <Target Name="BuildAgentJar" AfterTargets="Build" DependsOnTargets="ResolveAgentPaths"
+            Inputs="@(JavaSource);@(AgentLibrary);MANIFEST.MF" Outputs="$(AgentJar)">
+        <RemoveDir Directories="$(AgentClassesDir)" />
+        <MakeDir Directories="$(AgentClassesDir);$(OutDir)" />
+        <Exec Command="&quot;$(JavaBin)javac&quot; --release $(JavaRelease) -cp &quot;@(AgentLibrary->'%(FullPath)', '$([System.IO.Path]::PathSeparator)')&quot; -d &quot;$(AgentClassesDir)&quot; @(JavaSource->'&quot;%(FullPath)&quot;', ' ')" />
+        <Copy SourceFiles="@(AgentLibrary)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+        <Exec Command="&quot;$(JavaBin)jar&quot; --create --file &quot;$(AgentJar)&quot; --manifest MANIFEST.MF -C &quot;$(AgentClassesDir)&quot; ." />
+    </Target>
+
+</Project>
