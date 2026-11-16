@@ -1,17 +1,20 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using Wrench.Host.Logging;
 
 namespace Wrench.Host.Mods;
 
 /// <summary>Loads <c>mods/&lt;Name&gt;/&lt;Name&gt;.dll</c>, each into its own load context.</summary>
 internal static class ModLoader
 {
+    private static readonly Logger Log = Logging.Log.For("Wrench.Host");
+
     public static List<ModInstance> LoadAll(string modsDirectory)
     {
         var loaded = new List<ModInstance>();
         if (!Directory.Exists(modsDirectory))
         {
-            Console.WriteLine($"[Wrench.Host] No mods directory at {modsDirectory}");
+            Log.Info($"No mods directory at {modsDirectory}");
             return loaded;
         }
 
@@ -21,7 +24,7 @@ internal static class ModLoader
             var assemblyPath = Path.Combine(directory, id + ".dll");
             if (!File.Exists(assemblyPath))
             {
-                Console.WriteLine($"[Wrench.Host] Skipping {directory}: no {id}.dll");
+                Log.Warn($"Skipping {directory}: no {id}.dll");
                 continue;
             }
 
@@ -35,7 +38,7 @@ internal static class ModLoader
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[Wrench.Host] Failed to load {assemblyPath}: {e}");
+                Log.Error($"Failed to load {assemblyPath}", e);
                 continue;
             }
 
@@ -47,11 +50,11 @@ internal static class ModLoader
                     mod.Initialize(ModHost.Instance, id);
                     mod.OnLoad();
                     loaded.Add(mod);
-                    Console.WriteLine($"[Wrench.Host] Loaded {id} ({type.FullName})");
+                    Log.Info($"Loaded {id} ({type.FullName})");
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine($"[Wrench.Host] Failed to start {id} ({type.FullName}): {e}");
+                    Log.Error($"Failed to start {id} ({type.FullName})", e);
                 }
             }
         }

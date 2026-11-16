@@ -79,7 +79,7 @@ internal static unsafe class LuaEventRouter
                 }
                 catch (Exception e)
                 {
-                    ModHost.Instance.Log(registration.Mod, ModLogLevel.Error, $"{eventName} handler failed", e);
+                    ModHost.Instance.Log(registration.Mod, LogLevel.Error, $"{eventName} handler failed", e);
                 }
             }
         }

@@ -3,6 +3,7 @@ using JNIBinding;
 using JNIBinding.Bindings;
 using JNIBinding.Bindings.Native.Types;
 using Wrench.Host.Events;
+using Wrench.Host.Logging;
 using Wrench.Host.Mods;
 
 namespace Wrench.Host;
@@ -14,6 +15,8 @@ public static unsafe class Entry
     private const int Attached = 0;
     private const int VmNotReady = 1;
     private const int Failed = -1;
+
+    private static readonly Logger Log = Logging.Log.For("Wrench.Host");
 
     private static JvmLibrary? _library;
     private static JVM? _vm;
@@ -31,6 +34,7 @@ public static unsafe class Entry
             return Attached;
         try
         {
+            Logging.Log.CaptureJniBinding();
             _library ??= JvmLibrary.ForJavaHome(Marshal.PtrToStringUTF8(arg, size));
             var vm = JVM.GetCreated(_library);
             if (vm is null)
@@ -50,15 +54,15 @@ public static unsafe class Entry
             WrenchEventsClass = env.NewGlobalRef(events.Value).AsClass();
 
             _vm = vm;
-            Console.WriteLine($"[Wrench.Host] Attached to {vm}");
+            Log.Info($"Attached to {vm}");
 
             var mods = ModLoader.LoadAll(ModsDirectory());
-            Console.WriteLine($"[Wrench.Host] {mods.Count} mod(s) loaded");
+            Log.Info($"{mods.Count} mod(s) loaded");
             return Attached;
         }
         catch (Exception e)
         {
-            Console.Error.WriteLine($"[Wrench.Host] Attach failed: {e}");
+            Log.Error("Attach failed", e);
             return Failed;
         }
     }
@@ -77,7 +81,7 @@ public static unsafe class Entry
         var jEnv = JNIEnv.ForHandle(new _JNIEnv(env));
         try
         {
-            Console.WriteLine($"[Wrench.Host] hello {jEnv.AsString(new _JString(message))}");
+            Log.Info($"hello {jEnv.AsString(new _JString(message))}");
         }
         catch (Exception e)
         {

@@ -13,8 +13,8 @@ public class AgentRoundTripTest
     {
         var output = RunHello();
 
-        StringAssert.Contains(output, "[Wrench.Host] Attached to");
-        StringAssert.Contains(output, "[Wrench.Host] hello from Java");
+        StringAssert.Contains(output, "[Wrench.Host] INFO: Attached to");
+        StringAssert.Contains(output, "[Wrench.Host] INFO: hello from Java");
         StringAssert.Contains(output, "Hello.main ran");
     }
 
@@ -23,7 +23,7 @@ public class AgentRoundTripTest
     {
         var output = RunHello();
 
-        StringAssert.Contains(output, "[Wrench.Host] Loaded Wrench.Tests.SampleMod (Wrench.Tests.SampleMod.SampleMod)");
+        StringAssert.Contains(output, "[Wrench.Host] INFO: Loaded Wrench.Tests.SampleMod (Wrench.Tests.SampleMod.SampleMod)");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: OnGameBoot(hi, 42, null, java.lang.StringBuilder:sb)");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: second arg as double: 42");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: kept GameObject expired as expected");
@@ -49,16 +49,25 @@ public class AgentRoundTripTest
         Assert.DoesNotContain("OnTick(", output);
     }
 
+    [TestMethod]
+    public void Log_Level_Filters_Host_And_Mod_Output()
+    {
+        var output = RunHello(new() { ["WRENCH_LOG_LEVEL"] = "Error" });
+
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] ERROR: OnGameBoot handler failed");
+        Assert.DoesNotContain("INFO:", output);
+    }
+
     // Mirrors the vmArgs in PZ's ProjectZomboid64.json that affect agent loading and signal handling.
-    private static string RunHello() =>
-        RunJava(
+    private static string RunHello(Dictionary<string, string>? environment = null) =>
+        RunJava(environment,
             "--enable-native-access=ALL-UNNAMED",
             "-XX:+UseZGC",
             $"-javaagent:{Path.Combine(AppContext.BaseDirectory, "dist", "wrench-agent.jar")}",
             "-cp", Path.Combine(AppContext.BaseDirectory, "classes"),
             "Hello");
 
-    private static string RunJava(params string[] args)
+    private static string RunJava(Dictionary<string, string>? environment, params string[] args)
     {
         var javaHome = Environment.GetEnvironmentVariable("JAVA_HOME");
         var java = string.IsNullOrEmpty(javaHome) ? "java" : Path.Combine(javaHome, "bin", "java");
@@ -68,6 +77,8 @@ public class AgentRoundTripTest
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
+        foreach (var (name, value) in environment ?? [])
+            psi.Environment[name] = value;
         using var process = Process.Start(psi)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
