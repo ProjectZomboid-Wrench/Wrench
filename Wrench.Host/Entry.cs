@@ -2,6 +2,8 @@ using System.Runtime.InteropServices;
 using JNIBinding;
 using JNIBinding.Bindings;
 using JNIBinding.Bindings.Native.Types;
+using Wrench.Host.Events;
+using Wrench.Host.Mods;
 
 namespace Wrench.Host;
 

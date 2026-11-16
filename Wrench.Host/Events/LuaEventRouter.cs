@@ -3,8 +3,9 @@ using System.Collections.Immutable;
 using System.Runtime.InteropServices;
 using JNIBinding;
 using JNIBinding.Bindings.Native.Types;
+using Wrench.Host.Mods;
 
-namespace Wrench.Host;
+namespace Wrench.Host.Events;
 
 /// <summary>Routes Lua events from the agent's hook to mod handlers, keeping the agent's subscription set in sync.</summary>
 internal static unsafe class LuaEventRouter

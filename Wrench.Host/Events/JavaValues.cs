@@ -1,7 +1,7 @@
 using JNIBinding;
 using JNIBinding.Bindings.Native.Types;
 
-namespace Wrench.Host;
+namespace Wrench.Host.Events;
 
 /// <summary>Turns Lua event arguments into what mods see: plain .NET values, or <see cref="GameObject"/>s.</summary>
 internal static class JavaValues

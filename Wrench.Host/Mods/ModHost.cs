@@ -1,4 +1,5 @@
-namespace Wrench.Host;
+using Wrench.Host.Events;
+namespace Wrench.Host.Mods;
 
 internal sealed class ModHost : IModHost
 {

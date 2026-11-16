@@ -1,7 +1,7 @@
 using System.Reflection;
 using System.Runtime.Loader;
 
-namespace Wrench.Host;
+namespace Wrench.Host.Mods;
 
 /// <summary>Loads <c>mods/&lt;Name&gt;/&lt;Name&gt;.dll</c>, each into its own load context.</summary>
 internal static class ModLoader
