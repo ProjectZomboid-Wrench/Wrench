@@ -9,6 +9,8 @@
 
     <ItemGroup>
         <JavaSource Include="src/**/*.java" />
+        <!-- Compile-only stand-ins for PZ classes; see stubs/README.md. Never packaged. -->
+        <JavaStub Include="stubs/**/*.java" />
         <None Include="MANIFEST.MF" />
         <!-- Shipped beside wrench-agent.jar and referenced from MANIFEST.MF's Class-Path; keep the two in sync. -->
         <AgentLibrary Include="lib/*.jar" />
@@ -18,15 +20,17 @@
     <Target Name="ResolveAgentPaths">
         <PropertyGroup>
             <AgentClassesDir>$(IntermediateOutputPath)classes/</AgentClassesDir>
+            <AgentStubsDir>$(IntermediateOutputPath)stubs/</AgentStubsDir>
             <AgentJar>$(OutDir)wrench-agent.jar</AgentJar>
         </PropertyGroup>
     </Target>
 
     <Target Name="BuildAgentJar" AfterTargets="Build" DependsOnTargets="ResolveAgentPaths"
-            Inputs="@(JavaSource);@(AgentLibrary);MANIFEST.MF" Outputs="$(AgentJar)">
-        <RemoveDir Directories="$(AgentClassesDir)" />
-        <MakeDir Directories="$(AgentClassesDir);$(OutDir)" />
-        <Exec Command="&quot;$(JavaBin)javac&quot; --release $(JavaRelease) -cp &quot;@(AgentLibrary->'%(FullPath)', '$([System.IO.Path]::PathSeparator)')&quot; -d &quot;$(AgentClassesDir)&quot; @(JavaSource->'&quot;%(FullPath)&quot;', ' ')" />
+            Inputs="@(JavaSource);@(JavaStub);@(AgentLibrary);MANIFEST.MF" Outputs="$(AgentJar)">
+        <RemoveDir Directories="$(AgentClassesDir);$(AgentStubsDir)" />
+        <MakeDir Directories="$(AgentClassesDir);$(AgentStubsDir);$(OutDir)" />
+        <Exec Command="&quot;$(JavaBin)javac&quot; --release $(JavaRelease) -d &quot;$(AgentStubsDir)&quot; @(JavaStub->'&quot;%(FullPath)&quot;', ' ')" />
+        <Exec Command="&quot;$(JavaBin)javac&quot; --release $(JavaRelease) -cp &quot;@(AgentLibrary->'%(FullPath)', '$([System.IO.Path]::PathSeparator)')$([System.IO.Path]::PathSeparator)$(AgentStubsDir)&quot; -d &quot;$(AgentClassesDir)&quot; @(JavaSource->'&quot;%(FullPath)&quot;', ' ')" />
         <Copy SourceFiles="@(AgentLibrary)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
         <Exec Command="&quot;$(JavaBin)jar&quot; --create --file &quot;$(AgentJar)&quot; --manifest MANIFEST.MF -C &quot;$(AgentClassesDir)&quot; ." />
     </Target>

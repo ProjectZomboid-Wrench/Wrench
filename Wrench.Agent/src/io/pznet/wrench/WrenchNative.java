@@ -8,4 +8,6 @@ public final class WrenchNative {
     public static native void hello(String message);
 
     public static native void onLuaEvent(String name, Object[] args);
+
+    public static native Object[] invokeFunction(long id, Object[] args);
 }

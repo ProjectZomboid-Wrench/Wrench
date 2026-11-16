@@ -50,6 +50,36 @@ public class AgentRoundTripTest
     }
 
     [TestMethod]
+    public void Mods_Build_Lua_Tables_And_Functions_That_Lua_Calls()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "challenge id=WrenchTest name=Wrench test challenge");
+        StringAssert.Contains(output, "spawn x=10788.0 z=0.0");
+        StringAssert.Contains(output, "Zombies=1.0 PopulationMultiplier=2.5 XPMultiplierGlobal=1.0 XPMultiplierGlobalToggle=true");
+        StringAssert.Contains(output, "Add -> 42.0");
+    }
+
+    [TestMethod]
+    public void Mods_Call_Java_Objects_Dynamically_From_Lua_Callbacks()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: AddPlayer(0) rooms=1 player=FakePlayer");
+        StringAssert.Contains(output, "intoxication=100.0 inventoryCleared=true feet=null");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: caught: global 'missingGlobal' is nil");
+    }
+
+    [TestMethod]
+    public void Exceptions_In_Dotnet_Functions_Become_Lua_Errors()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "Fail -> ok=false error=Wrench.Tests.SampleMod: nope");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] ERROR: Lua call into a lambda in LuaInteropMod failed");
+    }
+
+    [TestMethod]
     public void Log_Level_Filters_Host_And_Mod_Output()
     {
         var output = RunHello(new() { ["WRENCH_LOG_LEVEL"] = "Error" });

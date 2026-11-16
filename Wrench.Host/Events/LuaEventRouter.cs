@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Runtime.InteropServices;
 using JNIBinding;
 using JNIBinding.Bindings.Native.Types;
+using Wrench.Host.Lua;
 using Wrench.Host.Mods;
 
 namespace Wrench.Host.Events;
@@ -69,10 +70,11 @@ internal static unsafe class LuaEventRouter
             if (!Handlers.TryGetValue(eventName, out var registrations) || registrations.IsEmpty)
                 return;
 
-            using var scope = new DispatchScope(jEnv);
+            using var scope = LuaScope.Enter(jEnv, mod: null);
             var eventArgs = new LuaEventArgs(eventName, JavaValues.ToDotnet(jEnv, new _JObjectArray(args), scope));
             foreach (var registration in registrations)
             {
+                scope.Mod = registration.Mod;
                 try
                 {
                     registration.Handler(eventArgs);
@@ -94,19 +96,5 @@ internal static unsafe class LuaEventRouter
         private Action? _unregister = unregister;
 
         public void Dispose() => Interlocked.Exchange(ref _unregister, null)?.Invoke();
-    }
-
-    /// <summary>Lifetime of the game objects handed to one dispatch; local refs die when the native call returns.</summary>
-    private sealed class DispatchScope(JNIEnv env) : IGameObjectScope, IDisposable
-    {
-        public bool IsActive { get; private set; } = true;
-
-        public int ThreadId { get; } = Environment.CurrentManagedThreadId;
-
-        public string GetTypeName(nint handle) => JavaBoxing.GetClassName(env, new _JObject(handle));
-
-        public string Describe(nint handle) => JavaBoxing.ToJavaString(env, new _JObject(handle));
-
-        public void Dispose() => IsActive = false;
     }
 }

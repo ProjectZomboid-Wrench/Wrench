@@ -4,6 +4,7 @@ using JNIBinding.Bindings;
 using JNIBinding.Bindings.Native.Types;
 using Wrench.Host.Events;
 using Wrench.Host.Logging;
+using Wrench.Host.Lua;
 using Wrench.Host.Mods;
 
 namespace Wrench.Host;
@@ -48,7 +49,12 @@ public static unsafe class Entry
                 .Add("hello", "(Ljava/lang/String;)V", (delegate* unmanaged<IntPtr, IntPtr, IntPtr, void>)&Hello)
                 .Add("onLuaEvent", "(Ljava/lang/String;[Ljava/lang/Object;)V",
                     (delegate* unmanaged<IntPtr, IntPtr, IntPtr, IntPtr, void>)&LuaEventRouter.OnLuaEvent)
+                .Add("invokeFunction", "(J[Ljava/lang/Object;)[Ljava/lang/Object;",
+                    (delegate* unmanaged<IntPtr, IntPtr, long, IntPtr, IntPtr>)&LuaFunctions.Invoke)
                 .Complete();
+
+            LuaBridge.Initialize(runtime);
+            LuaHost.Instance = LuaBridge.Instance;
 
             var events = runtime.FindSystemClass("io.pznet.wrench.WrenchEvents");
             WrenchEventsClass = env.NewGlobalRef(events.Value).AsClass();
@@ -90,10 +96,12 @@ public static unsafe class Entry
     }
 
     // Exceptions must not unwind through native frames; re-raise them on the Java side instead.
-    internal static void ThrowToJava(JNIEnv env, Exception e)
+    internal static void ThrowToJava(JNIEnv env, Exception e) => ThrowToJava(env, $"[Wrench.Host] {e}");
+
+    internal static void ThrowToJava(JNIEnv env, string text)
     {
         var cls = env.FindClass("java/lang/RuntimeException");
-        var message = Marshal.StringToCoTaskMemUTF8($"[Wrench.Host] {e}");
+        var message = Marshal.StringToCoTaskMemUTF8(text);
         try
         {
             env.ThrowNew(cls, (byte*)message);
