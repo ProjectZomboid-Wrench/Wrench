@@ -19,14 +19,34 @@ public class AgentRoundTripTest
     }
 
     [TestMethod]
-    public void Lua_Event_Trigger_Is_Forwarded_Only_When_Subscribed()
+    public void Mods_Receive_Lua_Events_As_Dotnet_Values()
     {
         var output = RunHello();
 
-        StringAssert.Contains(output, "[Wrench.Host] Lua event OnGameBoot(hi, 42, null)");
+        StringAssert.Contains(output, "[Wrench.Host] Loaded Wrench.Tests.SampleMod (Wrench.Tests.SampleMod.SampleMod)");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: OnGameBoot(hi, 42, null, java.lang.StringBuilder:sb)");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: second arg as double: 42");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: kept GameObject expired as expected");
+    }
+
+    [TestMethod]
+    public void Failing_Mod_Handler_Does_Not_Break_Other_Mods_Or_The_Game()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] ERROR: OnGameBoot handler failed");
+        StringAssert.Contains(output, "System.InvalidOperationException: boom");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: OnGameBoot(");
         StringAssert.Contains(output, "Event.trigger ran: OnGameBoot");
+    }
+
+    [TestMethod]
+    public void Unsubscribed_Events_Are_Not_Forwarded()
+    {
+        var output = RunHello();
+
         StringAssert.Contains(output, "Event.trigger ran: OnTick");
-        Assert.DoesNotContain("Lua event OnTick", output);
+        Assert.DoesNotContain("OnTick(", output);
     }
 
     // Mirrors the vmArgs in PZ's ProjectZomboid64.json that affect agent loading and signal handling.

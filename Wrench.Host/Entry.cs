@@ -16,9 +16,7 @@ public static unsafe class Entry
     private static JvmLibrary? _library;
     private static JVM? _vm;
 
-    [ThreadStatic] private static JNIEnv? _threadEnv;
-
-    private static readonly string[] DiagnosticEvents = ["OnGameBoot", "OnMainMenuEnter"];
+    internal static _JClass WrenchEventsClass { get; private set; }
 
     /// <summary>
     /// Called by the agent until it returns <see cref="Attached"/>. <paramref name="arg"/> is the running JVM's
@@ -37,18 +35,23 @@ public static unsafe class Entry
                 return VmNotReady;
 
             var runtime = new JavaRuntime(vm, vm.GetOrAttachEnv());
+            var env = runtime.Env;
+
             runtime.FindSystemClass("io.pznet.wrench.WrenchNative")
                 .BeginRegisterNatives()
                 .Add("hello", "(Ljava/lang/String;)V", (delegate* unmanaged<IntPtr, IntPtr, IntPtr, void>)&Hello)
                 .Add("onLuaEvent", "(Ljava/lang/String;[Ljava/lang/Object;)V",
-                    (delegate* unmanaged<IntPtr, IntPtr, IntPtr, IntPtr, void>)&LuaEvents.OnLuaEvent)
+                    (delegate* unmanaged<IntPtr, IntPtr, IntPtr, IntPtr, void>)&LuaEventRouter.OnLuaEvent)
                 .Complete();
 
-            foreach (var name in DiagnosticEvents)
-                LuaEvents.Subscribe(runtime, name, LogEvent);
+            var events = runtime.FindSystemClass("io.pznet.wrench.WrenchEvents");
+            WrenchEventsClass = env.NewGlobalRef(events.Value).AsClass();
 
             _vm = vm;
             Console.WriteLine($"[Wrench.Host] Attached to {vm}");
+
+            var mods = ModLoader.LoadAll(ModsDirectory());
+            Console.WriteLine($"[Wrench.Host] {mods.Count} mod(s) loaded");
             return Attached;
         }
         catch (Exception e)
@@ -58,10 +61,18 @@ public static unsafe class Entry
         }
     }
 
+    /// <summary>The calling thread's JNIEnv, attaching .NET-owned threads as daemons on first use.</summary>
+    internal static JNIEnv CurrentEnv() =>
+        (_vm ?? throw new InvalidOperationException("Wrench.Host isn't attached to a JVM")).GetOrAttachEnv(asDaemon: true);
+
+    // Beside host/ in the shipped layout: wrench/{wrench-agent.jar, host/, mods/, runtime/}.
+    private static string ModsDirectory() =>
+        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(typeof(Entry).Assembly.Location)!, "..", "mods"));
+
     [UnmanagedCallersOnly]
     private static void Hello(IntPtr env, IntPtr cls, IntPtr message)
     {
-        var jEnv = EnvFor(env);
+        var jEnv = JNIEnv.ForHandle(new _JNIEnv(env));
         try
         {
             Console.WriteLine($"[Wrench.Host] hello {jEnv.AsString(new _JString(message))}");
@@ -71,9 +82,6 @@ public static unsafe class Entry
             ThrowToJava(jEnv, e);
         }
     }
-
-    private static void LogEvent(JNIEnv env, string name, _JObjectArray args) =>
-        Console.WriteLine($"[Wrench.Host] Lua event {name}({string.Join(", ", LuaEvents.Describe(env, args))})");
 
     // Exceptions must not unwind through native frames; re-raise them on the Java side instead.
     internal static void ThrowToJava(JNIEnv env, Exception e)
@@ -88,13 +96,5 @@ public static unsafe class Entry
         {
             Marshal.FreeCoTaskMem(message);
         }
-    }
-
-    // Wrapping a JNIEnv binds every JNI function, so reuse it; the pointer is fixed per thread.
-    internal static JNIEnv EnvFor(IntPtr env)
-    {
-        if (_threadEnv is null || _threadEnv.EnvHandle.Value != env)
-            _threadEnv = new JNIEnv(new _JNIEnv(env));
-        return _threadEnv;
     }
 }

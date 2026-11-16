@@ -11,6 +11,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\JNIBinding\src\JNIBinding\JNIBinding.csproj" />
+        <ProjectReference Include="..\Wrench.Api\Wrench.Api.csproj" />
     </ItemGroup>
 
 </Project>

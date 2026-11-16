@@ -17,6 +17,7 @@
     <ItemGroup>
         <ProjectReference Include="..\Wrench.Agent\Wrench.Agent.csproj" ReferenceOutputAssembly="false" />
         <ProjectReference Include="..\Wrench.Host\Wrench.Host.csproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Wrench.Tests.SampleMod\Wrench.Tests.SampleMod.csproj" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <ItemGroup>
@@ -31,9 +32,11 @@
         <ItemGroup>
             <AgentJar Include="$(MSBuildThisFileDirectory)../Wrench.Agent/bin/$(Configuration)/net10.0/*.jar" />
             <HostFiles Include="$(MSBuildThisFileDirectory)../Wrench.Host/bin/$(Configuration)/net10.0/**/*" />
+            <SampleModFiles Include="$(MSBuildThisFileDirectory)../Wrench.Tests.SampleMod/bin/$(Configuration)/net10.0/**/*" />
         </ItemGroup>
         <Copy SourceFiles="@(AgentJar)" DestinationFolder="$(WrenchDistDir)" SkipUnchangedFiles="true" />
         <Copy SourceFiles="@(HostFiles)" DestinationFolder="$(WrenchDistDir)host/%(RecursiveDir)" SkipUnchangedFiles="true" />
+        <Copy SourceFiles="@(SampleModFiles)" DestinationFolder="$(WrenchDistDir)mods/Wrench.Tests.SampleMod/%(RecursiveDir)" SkipUnchangedFiles="true" />
     </Target>
 
     <Target Name="CompileJavaFixtures" AfterTargets="Build" Inputs="@(JavaSource)" Outputs="$(OutDir)classes/.stamp">
