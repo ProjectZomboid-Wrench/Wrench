@@ -7,9 +7,11 @@ namespace Wrench.Tests.SampleMod;
 /// <summary>Uses each part of the context-menu API; driven by LuaDriver.inventoryMenu.</summary>
 public sealed class MenuMod : ModInstance
 {
-    public override void OnLoad()
+    public override void OnLoad() => PatchLua(() => Lua.Define("WrenchTest.Taste", (string state) =>
     {
-    }
+        TasteCommand.State = state;
+        TasteCommand.Current?.NotifyCanExecuteChanged();
+    }));
 
     [InventoryCommand("ContextMenu_Serve", Item = "Test.Plate", CanExecute = nameof(CanServe))]
     private void Serve(InventoryItem plate, IsoPlayer player) => plate.Name = $"served {plate.Name} for {player}";
@@ -38,6 +40,27 @@ internal sealed class StirCommand : InventoryCommand<InventoryItem>
     public override string? Item => "Test.Spoon";
 
     public override void Execute(InventoryItem spoon, IsoPlayer player) => spoon.Name = "stirred";
+}
+
+internal sealed class TasteCommand : InventoryCommand<InventoryItem>
+{
+    internal static TasteCommand? Current;
+    internal static string State = "locked";
+
+    public TasteCommand() => Current = this;
+
+    public override string Text => "Taste";
+
+    public override string? Item => "Test.Spoon";
+
+    public override CommandState CanExecute(InventoryItem spoon, IsoPlayer player) => State switch
+    {
+        "locked" => CommandState.Disabled("Tooltip_Locked"),
+        "open" => CommandState.Enabled,
+        _ => CommandState.Hidden,
+    };
+
+    public override void Execute(InventoryItem spoon, IsoPlayer player) => spoon.Name = "tasted";
 }
 
 internal sealed class GourmetFiller : InventoryMenuFiller

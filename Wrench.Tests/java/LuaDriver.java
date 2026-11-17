@@ -170,6 +170,11 @@ public final class LuaDriver {
         new Event("OnFillInventoryObjectContextMenu").trigger(null, null, new Object[] {0.0, context, items});
 
         printMenu("menu", context);
+        var taste = ((KahluaTable) LuaManager.env.rawget("WrenchTest")).rawget("Taste");
+        LuaManager.thread.pcall(taste, new Object[] {"open"});
+        printMenu("opened", context);
+        LuaManager.thread.pcall(taste, new Object[] {"hidden"});
+        printMenu("hidden", context);
         clickAll(context);
         System.out.println("after clicks: " + plate + ", " + cold + ", " + spoon);
     }
