@@ -56,6 +56,217 @@ public final class LuaDriver {
         env.rawset("getActivatedMods", (JavaFunction) (frame, n) -> frame.push(new ArrayList<>(activeMods)));
         env.rawset("getModInfoByID", (JavaFunction) (frame, n) -> frame.push(modInfo((String) frame.get(0))));
         env.rawset("getMyDocumentFolder", (JavaFunction) (frame, n) -> frame.push(System.getProperty("wrench.test.home")));
+        env.rawset("isClient", (JavaFunction) (frame, n) -> frame.push(Boolean.FALSE));
+        timedActionClasses();
+        contextMenuClasses();
+    }
+
+    private static KahluaTable rootMenu;
+
+    // ISContextMenu as far as the menu API uses it: options are a 1-based sequence, submenus live in the root's instanceMap.
+    private static void contextMenuClasses() {
+        var env = LuaManager.env;
+        var menuClass = table();
+        menuClass.rawset("__index", menuClass);
+        menuClass.rawset("addOption", (JavaFunction) (frame, n) -> {
+            var self = (KahluaTable) frame.get(0);
+            var option = table();
+            option.rawset("name", frame.get(1));
+            option.rawset("target", frame.get(2));
+            option.rawset("onSelect", frame.get(3));
+            for (var i = 4; i < n; i++)
+                option.rawset("param" + (i - 3), frame.get(i));
+            var options = (KahluaTable) self.rawget("options");
+            options.rawset((double) (size(options) + 1), option);
+            return frame.push(option);
+        });
+        menuClass.rawset("getOptionFromName", (JavaFunction) (frame, n) -> {
+            var options = (KahluaTable) ((KahluaTable) frame.get(0)).rawget("options");
+            for (var i = 1; i <= size(options); i++) {
+                var option = (KahluaTable) options.rawget((double) i);
+                if (option.rawget("name").equals(frame.get(1)))
+                    return frame.push(option);
+            }
+            return 0;
+        });
+        menuClass.rawset("removeOptionByName", (JavaFunction) (frame, n) -> {
+            var options = (KahluaTable) ((KahluaTable) frame.get(0)).rawget("options");
+            var count = size(options);
+            for (var i = 1; i <= count; i++) {
+                if (((KahluaTable) options.rawget((double) i)).rawget("name").equals(frame.get(1))) {
+                    for (var j = i; j < count; j++)
+                        options.rawset((double) j, options.rawget((double) (j + 1)));
+                    options.rawset((double) count, null);
+                    break;
+                }
+            }
+            return 0;
+        });
+        menuClass.rawset("getNew", (JavaFunction) (frame, n) -> frame.push(newMenu(menuClass)));
+        menuClass.rawset("addSubMenu", (JavaFunction) (frame, n) -> {
+            var map = (KahluaTable) rootMenu.rawget("instanceMap");
+            var number = (double) (size(map) + 1);
+            map.rawset(number, frame.get(2));
+            ((KahluaTable) frame.get(1)).rawset("subOption", number);
+            return 0;
+        });
+        rootMenu = newMenu(menuClass);
+        env.rawset("getPlayerContextMenu", (JavaFunction) (frame, n) -> frame.push(rootMenu));
+
+        var pane = table();
+        pane.rawset("addToolTip", (JavaFunction) (frame, n) -> frame.push(table()));
+        env.rawset("ISInventoryPaneContextMenu", pane);
+        // Like PZ, text that isn't a known key comes back unchanged.
+        env.rawset("getText", (JavaFunction) (frame, n) -> {
+            var key = (String) frame.get(0);
+            return frame.push(key.contains("_") ? "<" + key + ">" : key);
+        });
+        env.rawset("getSpecificPlayer", (JavaFunction) (frame, n) -> frame.push(new FakePlayer()));
+    }
+
+    private static KahluaTable newMenu(KahluaTable menuClass) {
+        var menu = table();
+        menu.setMetatable(menuClass);
+        menu.rawset("options", table());
+        menu.rawset("instanceMap", table());
+        return menu;
+    }
+
+    private static int size(KahluaTable sequence) {
+        var n = 0;
+        while (sequence.rawget((double) (n + 1)) != null)
+            n++;
+        return n;
+    }
+
+    /**
+     * Opens the inventory context menu on a few items the way ISInventoryPaneContextMenu.createMenu does (vanilla's
+     * "Eat" first, then the event), prints it, then clicks every option the way ISContextMenu does.
+     */
+    public static void inventoryMenu() {
+        var plate = new FakeItem("Test.Plate", "plate");
+        var cold = new FakeItem("Test.Plate", "cold");
+        var spoon = new FakeItem("Test.Spoon", "spoon");
+        var stack = table();
+        var stackItems = table();
+        stackItems.rawset(1.0, cold);
+        stackItems.rawset(2.0, cold);
+        stack.rawset("items", stackItems);
+        var items = table();
+        items.rawset(1.0, plate);
+        items.rawset(2.0, stack);
+        items.rawset(3.0, spoon);
+
+        var context = rootMenu;
+        ((KahluaTable) context.rawget("options")).rawset(1.0, null);
+        LuaManager.thread.pcall(LuaManager.thread.tableget(context, "addOption"), new Object[] {context, "<ContextMenu_Eat>", plate,
+                (JavaFunction) (frame, n) -> {
+                    ((FakeItem) frame.get(0)).setName("eaten " + frame.get(0));
+                    return 0;
+                }});
+        new Event("OnFillInventoryObjectContextMenu").trigger(null, null, new Object[] {0.0, context, items});
+
+        printMenu("menu", context);
+        clickAll(context);
+        System.out.println("after clicks: " + plate + ", " + cold + ", " + spoon);
+    }
+
+    private static void printMenu(String label, KahluaTable menu) {
+        var options = (KahluaTable) menu.rawget("options");
+        var lines = new ArrayList<String>();
+        for (var i = 1; i <= size(options); i++) {
+            var option = (KahluaTable) options.rawget((double) i);
+            var tooltip = (KahluaTable) option.rawget("toolTip");
+            lines.add(option.rawget("name") + (Boolean.TRUE.equals(option.rawget("notAvailable")) ? " (disabled)" : "")
+                    + (tooltip != null ? " tooltip=" + tooltip.rawget("description") : "")
+                    + (option.rawget("subOption") != null ? " submenu" : ""));
+        }
+        System.out.println(label + ": " + String.join(" | ", lines));
+        for (var i = 1; i <= size(options); i++) {
+            var sub = ((KahluaTable) options.rawget((double) i)).rawget("subOption");
+            if (sub != null)
+                printMenu(label + " > " + ((KahluaTable) options.rawget((double) i)).rawget("name"),
+                        (KahluaTable) ((KahluaTable) rootMenu.rawget("instanceMap")).rawget(sub));
+        }
+    }
+
+    private static void clickAll(KahluaTable menu) {
+        var options = (KahluaTable) menu.rawget("options");
+        for (var i = 1; i <= size(options); i++) {
+            var option = (KahluaTable) options.rawget((double) i);
+            var sub = option.rawget("subOption");
+            if (sub != null) {
+                clickAll((KahluaTable) ((KahluaTable) rootMenu.rawget("instanceMap")).rawget(sub));
+                continue;
+            }
+            if (option.rawget("onSelect") == null || Boolean.TRUE.equals(option.rawget("notAvailable")))
+                continue;
+            var args = new Object[11];
+            args[0] = option.rawget("target");
+            for (var p = 1; p <= 10; p++)
+                args[p] = option.rawget("param" + p);
+            var result = LuaManager.thread.pcall(option.rawget("onSelect"), args);
+            if (!Boolean.TRUE.equals(result[0]))
+                System.out.println("click " + option.rawget("name") + " failed: " + result[1]);
+        }
+    }
+
+    private static final ArrayList<KahluaTable> actionQueue = new ArrayList<>();
+
+    // ISBaseObject:derive / ISBaseTimedAction:new as vanilla writes them, plus the base methods C# actions rely on.
+    private static void timedActionClasses() {
+        actionQueue.clear();
+        var base = table();
+        base.rawset("Type", "ISBaseTimedAction");
+        base.rawset("derive", (JavaFunction) (frame, n) -> {
+            var self = (KahluaTable) frame.get(0);
+            var derived = table();
+            derived.setMetatable(self);
+            self.rawset("__index", self);
+            derived.rawset("Type", frame.get(1));
+            System.out.println("derived " + frame.get(1));
+            return frame.push(derived);
+        });
+        base.rawset("new", (JavaFunction) (frame, n) -> {
+            var self = (KahluaTable) frame.get(0);
+            var action = table();
+            action.setMetatable(self);
+            self.rawset("__index", self);
+            action.rawset("character", frame.get(1));
+            action.rawset("maxTime", -1.0);
+            action.rawset("stopOnWalk", Boolean.TRUE);
+            return frame.push(action);
+        });
+        base.rawset("isValidStart", (JavaFunction) (frame, n) -> frame.push(Boolean.TRUE));
+        base.rawset("waitToStart", (JavaFunction) (frame, n) -> frame.push(Boolean.FALSE));
+        base.rawset("update", (JavaFunction) (frame, n) -> {
+            note((KahluaTable) frame.get(0), "base update");
+            return 0;
+        });
+        base.rawset("perform", (JavaFunction) (frame, n) -> {
+            note((KahluaTable) frame.get(0), "base perform");
+            actionQueue.remove(frame.get(0));
+            return 0;
+        });
+        base.rawset("stop", (JavaFunction) (frame, n) -> {
+            note((KahluaTable) frame.get(0), "base stop");
+            actionQueue.clear();
+            return 0;
+        });
+        base.rawset("forceCancel", (JavaFunction) (frame, n) -> 0);
+        LuaManager.env.rawset("ISBaseTimedAction", base);
+
+        var queue = table();
+        queue.rawset("add", (JavaFunction) (frame, n) -> {
+            actionQueue.add((KahluaTable) frame.get(0));
+            return frame.push(queue);
+        });
+        LuaManager.env.rawset("ISTimedActionQueue", queue);
+    }
+
+    private static void note(KahluaTable action, String event) {
+        var log = action.rawget("log");
+        action.rawset("log", log == null ? event : log + "; " + event);
     }
 
     private static FakeModInfo modInfo(String id) {
@@ -139,6 +350,40 @@ public final class LuaDriver {
         var items = new ArrayList<Object>(List.of("rice", "plate"));
         var result = LuaManager.thread.pcall(functions.rawget(functionName), new Object[] {items});
         System.out.println("typed " + functionName + " -> " + result[0] + " " + items);
+    }
+
+    /**
+     * Queues an action written in C# through WrenchTest.QueueAction, then runs it the way LuaTimedActionNew and the
+     * queue do: one to completion, one interrupted. Calls after it ended fall back to the Lua base class.
+     */
+    public static void timedActions() {
+        var functions = (KahluaTable) LuaManager.env.rawget("WrenchTest");
+        var queueAction = functions.rawget("QueueAction");
+        LuaManager.thread.pcall(queueAction, new Object[] {new FakePlayer(), "finished"});
+        var finished = actionQueue.get(0);
+        System.out.println("action " + LuaManager.thread.tableget(finished, "Type") + " maxTime=" + LuaManager.thread.tableget(finished, "maxTime")
+                + " isValidStart=" + method(finished, "isValidStart") + " waitToStart=" + method(finished, "waitToStart"));
+        method(finished, "start");
+        method(finished, "update");
+        method(finished, "update");
+        var valid = method(finished, "isValid");
+        method(finished, "perform");
+        var completed = method(finished, "complete");
+        System.out.println("finished: isValid=" + valid + " complete=" + completed + " queued=" + actionQueue.size()
+                + " log=[" + finished.rawget("log") + "] afterwards isValid=" + method(finished, "isValid"));
+
+        LuaManager.thread.pcall(queueAction, new Object[] {new FakePlayer(), "interrupted"});
+        var interrupted = actionQueue.get(0);
+        method(interrupted, "start");
+        method(interrupted, "stop");
+        System.out.println("interrupted: queued=" + actionQueue.size() + " log=[" + interrupted.rawget("log") + "]");
+    }
+
+    private static Object method(KahluaTable self, String name) {
+        var result = LuaManager.thread.pcall(LuaManager.thread.tableget(self, name), new Object[] {self});
+        if (!Boolean.TRUE.equals(result[0]))
+            return "error: " + result[1];
+        return result.length > 1 ? result[1] : null;
     }
 
     /** Like Core.ResetLua: every global is recreated, then OnGameBoot fires again. */

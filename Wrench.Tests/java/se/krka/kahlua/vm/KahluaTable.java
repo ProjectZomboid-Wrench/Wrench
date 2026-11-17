@@ -5,4 +5,8 @@ public interface KahluaTable {
     void rawset(Object key, Object value);
 
     Object rawget(Object key);
+
+    KahluaTable getMetatable();
+
+    void setMetatable(KahluaTable metatable);
 }

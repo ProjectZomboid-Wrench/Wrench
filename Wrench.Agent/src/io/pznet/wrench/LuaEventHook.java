@@ -10,7 +10,8 @@ import net.bytebuddy.asm.Advice;
 
 /**
  * Every Lua event dispatch in PZ ends in {@code zombie.Lua.Event.trigger(KahluaTable, LuaCaller, Object[])},
- * including the queued and triggerEventGarbage/Unique paths, so one advice on it sees them all.
+ * including the queued and triggerEventGarbage/Unique paths, so one advice on it sees them all: on entry for
+ * Wrench's hooks, on exit for mod handlers.
  */
 final class LuaEventHook {
     private LuaEventHook() {
@@ -33,7 +34,12 @@ final class LuaEventHook {
         // Inlined into Event.trigger; suppress keeps a Wrench failure from breaking the game's dispatch.
         @Advice.OnMethodEnter(suppress = Throwable.class)
         static void enter(@Advice.FieldValue("name") String name, @Advice.Argument(2) Object[] args) {
-            WrenchEvents.dispatch(name, args);
+            WrenchEvents.dispatch(name, args, false);
+        }
+
+        @Advice.OnMethodExit(onThrowable = Throwable.class, suppress = Throwable.class)
+        static void exit(@Advice.FieldValue("name") String name, @Advice.Argument(2) Object[] args) {
+            WrenchEvents.dispatch(name, args, true);
         }
     }
 }

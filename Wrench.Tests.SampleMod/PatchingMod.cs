@@ -1,5 +1,6 @@
 using Wrench;
 using Zomboid;
+using Zomboid.Characters;
 
 namespace Wrench.Tests.SampleMod;
 
@@ -22,6 +23,8 @@ public sealed class PatchingMod : ModInstance
         Lua.Replace("Tutorial1.lockDoor", (int x, int y, int z) => $"locked {x},{y},{z} in .NET");
         Lua.Define("WrenchTest.Typed", (JavaList<string> items) =>
             items.Add($"typed: count={items.Count} first={items[0]} upper={string.Join("|", items.Select(i => i.ToUpperInvariant()))}"));
+        Lua.Define("WrenchTest.QueueAction",
+            (IsoGameCharacter character, string label) => new TestAction(character, label).Queue());
         Lua.Define("WrenchTest.OnCreate.MakePlate", (dynamic craftData, dynamic character) =>
             craftData.addLog($"plated in .NET after {character.getHoursSurvived()} hours"));
 

@@ -52,10 +52,11 @@ internal static class ModLoader
             return started;
         }
 
+        Assembly assembly;
         Type[] modTypes;
         try
         {
-            var assembly = new ModLoadContext(id, assemblyPath).LoadFromAssemblyPath(assemblyPath);
+            assembly = new ModLoadContext(id, assemblyPath).LoadFromAssemblyPath(assemblyPath);
             modTypes = assembly.GetTypes()
                 .Where(t => t is { IsClass: true, IsAbstract: false } && t.IsSubclassOf(typeof(ModInstance)))
                 .ToArray();
@@ -83,6 +84,15 @@ internal static class ModLoader
         }
         if (modTypes.Length == 0)
             Log.Warn($"{assemblyPath} contains no ModInstance subclasses");
+
+        try
+        {
+            Zomboid.ContextMenus.ContextMenuRegistry.Discover(assembly, started);
+        }
+        catch (Exception e)
+        {
+            Log.Error($"Failed to set up {id}'s context menus", e);
+        }
         return started;
     }
 

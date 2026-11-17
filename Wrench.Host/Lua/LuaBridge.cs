@@ -37,6 +37,8 @@ internal sealed unsafe class LuaBridge : ILuaHost
         _function = Static(env, "function", "(J)Ljava/lang/Object;");
     }
 
+    public ModInstance? CurrentMod => LuaScope.Current.Mod;
+
     public object? GetGlobal(string name)
     {
         var scope = LuaScope.Current;

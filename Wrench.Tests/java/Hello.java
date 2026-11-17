@@ -10,10 +10,14 @@ public class Hello {
         LuaDriver.trustFlow();
         LuaDriver.run();
         LuaDriver.callPatched("player0");
+        LuaDriver.timedActions();
         LuaDriver.reload();
         LuaDriver.callPatched("player1");
         LuaDriver.craftOnCreate("WrenchTest.OnCreate.MakePlate");
         LuaDriver.typedCall("Typed");
+        LuaDriver.inventoryMenu();
+        LuaDriver.timedActions();
+        LuaDriver.timedActions();
         LuaDriver.pzModLifecycle();
     }
 }

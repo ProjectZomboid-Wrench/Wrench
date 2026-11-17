@@ -41,6 +41,18 @@ public class AgentRoundTripTest
     }
 
     [TestMethod]
+    public void Mod_Handlers_Run_After_The_Events_Lua_Callbacks()
+    {
+        var output = RunHello();
+
+        // The stand-in Event.trigger prints where PZ would run the Lua callbacks.
+        var luaCallbacks = output.IndexOf("Event.trigger ran: OnGameBoot", StringComparison.Ordinal);
+        var modHandler = output.IndexOf("[Wrench.Tests.SampleMod] INFO: OnGameBoot(", StringComparison.Ordinal);
+        Assert.IsGreaterThan(-1, luaCallbacks);
+        Assert.IsGreaterThan(luaCallbacks, modHandler);
+    }
+
+    [TestMethod]
     public void Unsubscribed_Events_Are_Not_Forwarded()
     {
         var output = RunHello();
@@ -111,6 +123,33 @@ public class AgentRoundTripTest
         var output = RunHello();
 
         StringAssert.Contains(output, "typed Typed -> true [rice, plate, typed: count=2 first=rice upper=RICE|PLATE]");
+    }
+
+    [TestMethod]
+    public void Timed_Actions_Written_In_Dotnet_Run_Through_The_Lua_Class()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "action Wrench.Tests.SampleMod.TestAction maxTime=50.0 isValidStart=true waitToStart=false");
+        StringAssert.Contains(output, "finished: isValid=true complete=true queued=0 log=[start finished; base update; base update; " +
+                                      "perform after 2 updates; base perform; complete after 0 hours, stopOnWalk=False] afterwards isValid=null");
+        StringAssert.Contains(output, "interrupted: queued=0 log=[start interrupted; stop; base stop]");
+        // Once per Lua state: reused across actions, rebuilt after a reload.
+        Assert.AreEqual(2, Count(output, "derived Wrench.Tests.SampleMod.TestAction"));
+    }
+
+    [TestMethod]
+    public void Context_Menu_Commands_Fillers_And_Overrides_Build_And_Handle_The_Menu()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "menu: <ContextMenu_Eat> | ");
+        StringAssert.Contains(output, "| <ContextMenu_Serve> |");
+        StringAssert.Contains(output, "| <ContextMenu_Reheat> (disabled) tooltip=<Tooltip_NoStove> |");
+        StringAssert.Contains(output, "| Stir tooltip=Found by the filler | Gourmet (3 items) submenu");
+        StringAssert.Contains(output, "menu > Gourmet (3 items): Polish");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: eat overridden, original target plate");
+        StringAssert.Contains(output, "after clicks: served eaten plate for FakePlayer, polished, stirred");
     }
 
     [TestMethod]

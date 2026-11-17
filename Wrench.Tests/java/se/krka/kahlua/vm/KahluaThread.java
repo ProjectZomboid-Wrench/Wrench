@@ -6,10 +6,15 @@ import java.util.Arrays;
 
 // Test stand-in for Kahlua's KahluaThread. Indexing a Java object yields a method binding, mimicking PZ's exposer:
 // obj:method(...) calls the public method by name and arity, converting Lua numbers to the parameter types.
+// Tables follow a metatable's __index table, as derive-style classes need.
 public class KahluaThread {
     public Object tableget(Object table, Object key) {
-        if (table instanceof KahluaTable t)
-            return t.rawget(key);
+        if (table instanceof KahluaTable t) {
+            var value = t.rawget(key);
+            if (value == null && t.getMetatable() != null && t.getMetatable().rawget("__index") instanceof KahluaTable index)
+                return tableget(index, key);
+            return value;
+        }
         if (table == null)
             throw new RuntimeException("attempted to index a nil value");
         return new MethodBinding(String.valueOf(key));

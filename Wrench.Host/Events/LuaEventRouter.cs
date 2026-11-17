@@ -9,7 +9,10 @@ using Wrench.Host.Mods;
 
 namespace Wrench.Host.Events;
 
-/// <summary>Routes Lua events from the agent's hook to mod handlers, keeping the agent's subscription set in sync.</summary>
+/// <summary>
+/// Routes Lua events from the agent's hook, keeping its subscriptions in sync: host hooks run before the event's Lua
+/// callbacks, mod handlers after them, so mods see what vanilla and Lua mods did (e.g. their context-menu options).
+/// </summary>
 internal static unsafe class LuaEventRouter
 {
     private static readonly Logger Log = Logging.Log.For("Wrench.Host");
@@ -21,19 +24,19 @@ internal static unsafe class LuaEventRouter
     private static readonly Lock Gate = new();
 
     /// <summary>
-    /// Runs <paramref name="hook"/> on <paramref name="eventName"/> before any mod handler, and before the handler list
-    /// is read, so mods the hook loads receive the same event.
+    /// Runs <paramref name="hook"/> on <paramref name="eventName"/> before its Lua callbacks and mod handlers, so mods
+    /// the hook loads receive the same event.
     /// </summary>
     public static void AddHostHook(string eventName, Action hook)
     {
         bool first;
         lock (Gate)
         {
-            first = !Handlers.ContainsKey(eventName) && !HostHooks.ContainsKey(eventName);
+            first = !HostHooks.ContainsKey(eventName);
             HostHooks[eventName] = HostHooks.GetValueOrDefault(eventName, []).Add(hook);
         }
         if (first)
-            SetAgentSubscription(eventName, subscribe: true);
+            SetAgentSubscription(eventName, subscribe: true, afterLua: false);
     }
 
     public static IDisposable Register(ModInstance mod, string eventName, Action<LuaEventArgs> handler)
@@ -43,11 +46,11 @@ internal static unsafe class LuaEventRouter
         lock (Gate)
         {
             var existing = Handlers.GetValueOrDefault(eventName, []);
-            first = existing.IsEmpty && !HostHooks.ContainsKey(eventName);
+            first = existing.IsEmpty;
             Handlers[eventName] = existing.Add(registration);
         }
         if (first)
-            SetAgentSubscription(eventName, subscribe: true);
+            SetAgentSubscription(eventName, subscribe: true, afterLua: true);
         return new Unregistration(() => Unregister(eventName, registration));
     }
 
@@ -85,53 +88,43 @@ internal static unsafe class LuaEventRouter
             if (!Handlers.TryGetValue(eventName, out var existing))
                 return;
             var remaining = existing.Remove(registration);
-            last = remaining.IsEmpty && !existing.IsEmpty && !HostHooks.ContainsKey(eventName);
+            last = remaining.IsEmpty && !existing.IsEmpty;
             if (remaining.IsEmpty)
                 Handlers.TryRemove(eventName, out _);
             else
                 Handlers[eventName] = remaining;
         }
         if (last)
-            SetAgentSubscription(eventName, subscribe: false);
+            SetAgentSubscription(eventName, subscribe: false, afterLua: true);
     }
 
-    private static void SetAgentSubscription(string eventName, bool subscribe)
+    private static void SetAgentSubscription(string eventName, bool subscribe, bool afterLua)
     {
         var env = Entry.CurrentEnv();
         var events = Entry.WrenchEventsClass;
-        var method = env.GetStaticMethodId(events, subscribe ? "subscribe" : "unsubscribe", "(Ljava/lang/String;)V");
+        var method = env.GetStaticMethodId(events, subscribe ? "subscribe" : "unsubscribe", "(Ljava/lang/String;Z)V");
         var name = env.AsJString(eventName);
-        _JValue* args = stackalloc _JValue[] { new _JValue((_JObject)name) };
+        _JValue* args = stackalloc _JValue[] { new _JValue((_JObject)name), new _JValue(afterLua ? _JBoolean.True : _JBoolean.False) };
         env.CallStaticVoidMethod(events, method, args);
         env.DeleteLocalRef((_JObject)name);
     }
 
     [UnmanagedCallersOnly]
-    internal static void OnLuaEvent(IntPtr env, IntPtr cls, IntPtr name, IntPtr args)
+    internal static void OnLuaEvent(IntPtr env, IntPtr cls, IntPtr name, IntPtr args, byte afterLua)
     {
         var jEnv = JNIEnv.ForHandle(new _JNIEnv(env));
         try
         {
             var eventName = jEnv.AsString(new _JString(name));
-            var hooks = HostHooks.GetValueOrDefault(eventName, []);
-            if (hooks.IsEmpty && !Handlers.ContainsKey(eventName))
-                return;
-
-            using var scope = LuaScope.Enter(jEnv, mod: null);
-            foreach (var hook in hooks)
+            if (afterLua == 0)
             {
-                try
-                {
-                    hook();
-                }
-                catch (Exception e)
-                {
-                    Log.Error($"Host hook for {eventName} failed", e);
-                }
+                RunHostHooks(jEnv, eventName);
+                return;
             }
 
             if (!Handlers.TryGetValue(eventName, out var registrations) || registrations.IsEmpty)
                 return;
+            using var scope = LuaScope.Enter(jEnv, mod: null);
             var eventArgs = new LuaEventArgs(eventName, JavaValues.ToDotnet(jEnv, new _JObjectArray(args), scope));
             foreach (var registration in registrations)
             {
@@ -151,6 +144,25 @@ internal static unsafe class LuaEventRouter
         catch (Exception e)
         {
             Entry.ThrowToJava(jEnv, e);
+        }
+    }
+
+    private static void RunHostHooks(JNIEnv env, string eventName)
+    {
+        var hooks = HostHooks.GetValueOrDefault(eventName, []);
+        if (hooks.IsEmpty)
+            return;
+        using var scope = LuaScope.Enter(env, mod: null);
+        foreach (var hook in hooks)
+        {
+            try
+            {
+                hook();
+            }
+            catch (Exception e)
+            {
+                Log.Error($"Host hook for {eventName} failed", e);
+            }
         }
     }
 
