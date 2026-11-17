@@ -14,7 +14,7 @@ internal static class ModVetting
     private const int MaxReported = 10;
 
     private static readonly string FrameworkDirectory = RuntimeEnvironment.GetRuntimeDirectory();
-    private static readonly string[] HostAssemblies = ["Wrench.Api", "Wrench.Game", "Wrench.Host", "JNIBinding", "ILVerification"];
+    private static readonly string[] HostAssemblies = ["Wrench.Api", "Wrench.Game.Java", "Wrench.Game.Lua", "Wrench.Host", "JNIBinding", "ILVerification"];
 
     public static List<string> Vet(string assemblyPath)
     {
@@ -78,7 +78,8 @@ internal static class ModVetting
                        ?? name switch
                        {
                            "Wrench.Api" => typeof(ModInstance).Assembly.Location,
-                           "Wrench.Game" => typeof(Zomboid.JavaObject).Assembly.Location,
+                           "Wrench.Game.Java" => typeof(Zomboid.Java.JavaObject).Assembly.Location,
+                           "Wrench.Game.Lua" => typeof(Zomboid.Lua.LuaObject).Assembly.Location,
                            _ => null,
                        };
             if (path is null)

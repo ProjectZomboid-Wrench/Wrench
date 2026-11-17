@@ -1,5 +1,5 @@
-using Zomboid.Characters;
-using Zomboid.TimedActions;
+using Zomboid.Java.Characters;
+using Zomboid.Lua.TimedActions;
 
 namespace Wrench.Tests.SampleMod;
 

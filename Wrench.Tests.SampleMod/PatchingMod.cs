@@ -1,6 +1,6 @@
 using Wrench;
-using Zomboid;
-using Zomboid.Characters;
+using Zomboid.Java;
+using Zomboid.Java.Characters;
 
 namespace Wrench.Tests.SampleMod;
 

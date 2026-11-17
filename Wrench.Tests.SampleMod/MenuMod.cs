@@ -1,6 +1,6 @@
-using Zomboid.Characters;
-using Zomboid.ContextMenus;
-using Zomboid.Inventory;
+using Zomboid.Java.Characters;
+using Zomboid.Java.Inventory;
+using Zomboid.Lua.ContextMenus;
 
 namespace Wrench.Tests.SampleMod;
 

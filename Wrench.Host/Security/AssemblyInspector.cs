@@ -14,7 +14,7 @@ namespace Wrench.Host.Security;
 internal sealed class AssemblyInspector(IReadOnlySet<string> modAssemblyNames)
 {
     // The API a mod is meant to use: everything in it goes through Kahlua, as Lua's access does.
-    private static readonly HashSet<string> WrenchAssemblies = ["Wrench.Api", "Wrench.Game"];
+    private static readonly HashSet<string> WrenchAssemblies = ["Wrench.Api", "Wrench.Game.Java", "Wrench.Game.Lua"];
 
     private const string BinderType = "Microsoft.CSharp.RuntimeBinder.Binder";
     private const string TypeType = "System.Type";

@@ -149,7 +149,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
                 return _JObject.Null;
             case GameObject gameObject:
                 return new _JObject(gameObject.Handle);
-            case Zomboid.JavaObject wrapper:
+            case Zomboid.Java.JavaObject wrapper:
                 return new _JObject(wrapper.AsGameObject().Handle);
             case string or bool:
                 return temps.Add(JavaBoxing.Box(env, value));

@@ -87,7 +87,7 @@ internal static class ModLoader
 
         try
         {
-            Zomboid.ContextMenus.ContextMenuRegistry.Discover(assembly, started);
+            Zomboid.Lua.ContextMenus.ContextMenuRegistry.Discover(assembly, started);
         }
         catch (Exception e)
         {
@@ -98,12 +98,13 @@ internal static class ModLoader
 
     private sealed class ModLoadContext(string id, string assemblyPath) : AssemblyLoadContext(id)
     {
-        private static readonly Assembly[] SharedAssemblies = [typeof(ModInstance).Assembly, typeof(Zomboid.JavaObject).Assembly];
+        private static readonly Assembly[] SharedAssemblies =
+            [typeof(ModInstance).Assembly, typeof(Zomboid.Java.JavaObject).Assembly, typeof(Zomboid.Lua.LuaObject).Assembly];
         private readonly AssemblyDependencyResolver _resolver = new(assemblyPath);
 
         protected override Assembly? Load(AssemblyName name)
         {
-            // Every mod must bind to the host's Wrench.Api and Wrench.Game, or ModInstance (and every game wrapper)
+            // Every mod must bind to the host's Wrench.Api and Wrench.Game.*, or ModInstance (and every game wrapper)
             // would be a different type per mod.
             var shared = SharedAssemblies.FirstOrDefault(a => a.GetName().Name == name.Name);
             if (shared is not null)
