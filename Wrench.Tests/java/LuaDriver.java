@@ -68,6 +68,7 @@ public final class LuaDriver {
         var env = LuaManager.env;
         var menuClass = table();
         menuClass.rawset("__index", menuClass);
+        menuClass.rawset("Type", "ISContextMenu");
         menuClass.rawset("addOption", (JavaFunction) (frame, n) -> {
             var self = (KahluaTable) frame.get(0);
             var option = table();
@@ -110,6 +111,8 @@ public final class LuaDriver {
             ((KahluaTable) frame.get(1)).rawset("subOption", number);
             return 0;
         });
+        menuClass.rawset("getSubMenu", (JavaFunction) (frame, n) ->
+                frame.push(((KahluaTable) rootMenu.rawget("instanceMap")).rawget(frame.get(1))));
         rootMenu = newMenu(menuClass);
         env.rawset("getPlayerContextMenu", (JavaFunction) (frame, n) -> frame.push(rootMenu));
 
