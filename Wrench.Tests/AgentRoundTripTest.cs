@@ -131,9 +131,9 @@ public class AgentRoundTripTest
         var output = RunHello();
 
         StringAssert.Contains(output, "action Wrench.Tests.SampleMod.TestAction maxTime=50.0 isValidStart=true waitToStart=false");
-        StringAssert.Contains(output, "finished: isValid=true complete=true queued=0 log=[start finished; base update; base update; " +
+        StringAssert.Contains(output, "finished: isValid=true complete=true queued=0 log=[start finished; anim Loot; base update; base update; " +
                                       "perform after 2 updates; base perform; complete after 0 hours, stopOnWalk=False] afterwards isValid=null");
-        StringAssert.Contains(output, "interrupted: queued=0 log=[start interrupted; stop; base stop]");
+        StringAssert.Contains(output, "interrupted: queued=0 log=[start interrupted; anim Loot; stop; base stop]");
         // Once per Lua state: reused across actions, rebuilt after a reload.
         Assert.AreEqual(2, Count(output, "derived Wrench.Tests.SampleMod.TestAction"));
     }
@@ -150,6 +150,17 @@ public class AgentRoundTripTest
         StringAssert.Contains(output, "menu > Gourmet (3 items): Polish");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: eat overridden, original target plate");
         StringAssert.Contains(output, "after clicks: served eaten plate for FakePlayer, polished, stirred");
+    }
+
+    [TestMethod]
+    public void Vanilla_Lua_Classes_Are_Wrapped_By_Their_Real_Class_And_Can_Be_Subclassed()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "inspect -> ISInventoryTransferAction maxTime=-1 stopOnWalk=True valid=True log=[vanilla transfer isValid]");
+        StringAssert.Contains(output, "subclassed Wrench.Tests.SampleMod.LoggedTransfer: isValid=true log=[C# isValid; vanilla transfer isValid]");
+        StringAssert.Contains(output, "sequence -> count=3 first=a last=c");
+        StringAssert.Contains(output, "union -> text hi | number 2.5 | action maxTime=-1");
     }
 
     [TestMethod]

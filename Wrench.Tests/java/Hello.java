@@ -18,6 +18,7 @@ public class Hello {
         LuaDriver.inventoryMenu();
         LuaDriver.timedActions();
         LuaDriver.timedActions();
+        LuaDriver.vanillaClasses();
         LuaDriver.pzModLifecycle();
     }
 }

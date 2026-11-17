@@ -58,6 +58,8 @@ internal static class ModPolicy
         "System.Runtime.CompilerServices.ScopedRefAttribute",
         "System.Runtime.CompilerServices.ParamCollectionAttribute",
         "System.Runtime.CompilerServices.InterpolatedStringHandlerAttribute",
+        // Thrown by exhaustive switch expressions (e.g. over a union) when no arm matches.
+        "System.Runtime.CompilerServices.SwitchExpressionException",
         "System.Runtime.CompilerServices.DefaultInterpolatedStringHandler",
         "System.Runtime.CompilerServices.FormattableStringFactory",
         "System.Runtime.CompilerServices.CompilationRelaxationsAttribute",

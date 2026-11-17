@@ -17,7 +17,11 @@ internal sealed class TestAction : TimedAction
 
     public override bool IsValid() => true;
 
-    public override void Start() => Note($"start {Get<string>("label")}");
+    public override void Start()
+    {
+        Note($"start {Get<string>("label")}");
+        SetActionAnim("Loot");
+    }
 
     public override void Update()
     {

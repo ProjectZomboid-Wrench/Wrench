@@ -254,7 +254,19 @@ public final class LuaDriver {
             return 0;
         });
         base.rawset("forceCancel", (JavaFunction) (frame, n) -> 0);
+        base.rawset("setActionAnim", (JavaFunction) (frame, n) -> {
+            note((KahluaTable) frame.get(0), "anim " + frame.get(1));
+            return 0;
+        });
         LuaManager.env.rawset("ISBaseTimedAction", base);
+
+        // A vanilla subclass, made the way vanilla makes them.
+        var transfer = (KahluaTable) LuaManager.thread.pcall(base.rawget("derive"), new Object[] {base, "ISInventoryTransferAction"})[1];
+        transfer.rawset("isValid", (JavaFunction) (frame, n) -> {
+            note((KahluaTable) frame.get(0), "vanilla transfer isValid");
+            return frame.push(Boolean.TRUE);
+        });
+        LuaManager.env.rawset("ISInventoryTransferAction", transfer);
 
         var queue = table();
         queue.rawset("add", (JavaFunction) (frame, n) -> {
@@ -377,6 +389,30 @@ public final class LuaDriver {
         method(interrupted, "start");
         method(interrupted, "stop");
         System.out.println("interrupted: queued=" + actionQueue.size() + " log=[" + interrupted.rawget("log") + "]");
+    }
+
+    /**
+     * Hands C# a vanilla action (a table of a vanilla subclass) through a wrapper-typed parameter, has C# subclass that
+     * vanilla class and runs the result, and passes a Lua sequence to a C# list parameter.
+     */
+    public static void vanillaClasses() {
+        var functions = (KahluaTable) LuaManager.env.rawget("WrenchTest");
+        var transfer = (KahluaTable) LuaManager.env.rawget("ISInventoryTransferAction");
+        var vanilla = (KahluaTable) LuaManager.thread.pcall(LuaManager.thread.tableget(transfer, "new"), new Object[] {transfer, new FakePlayer()})[1];
+        System.out.println("inspect -> " + LuaManager.thread.pcall(functions.rawget("Inspect"), new Object[] {vanilla})[1]
+                + " log=[" + vanilla.rawget("log") + "]");
+
+        LuaManager.thread.pcall(functions.rawget("Transfer"), new Object[] {new FakePlayer()});
+        var subclassed = actionQueue.get(actionQueue.size() - 1);
+        System.out.println("subclassed " + LuaManager.thread.tableget(subclassed, "Type") + ": isValid=" + method(subclassed, "isValid")
+                + " log=[" + subclassed.rawget("log") + "]");
+        actionQueue.clear();
+
+        var result = LuaManager.thread.pcall(functions.rawget("Sequence"), new Object[] {LuaManager.env.rawget("Items")});
+        System.out.println("sequence -> " + result[1]);
+        var union = functions.rawget("Union");
+        System.out.println("union -> " + LuaManager.thread.pcall(union, new Object[] {"hi"})[1] + " | "
+                + LuaManager.thread.pcall(union, new Object[] {2.5})[1] + " | " + LuaManager.thread.pcall(union, new Object[] {vanilla})[1]);
     }
 
     private static Object method(KahluaTable self, String name) {

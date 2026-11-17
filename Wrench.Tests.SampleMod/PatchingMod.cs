@@ -1,6 +1,7 @@
 using Wrench;
 using Zomboid.Java;
 using Zomboid.Java.Characters;
+using Zomboid.Lua;
 
 namespace Wrench.Tests.SampleMod;
 
@@ -23,6 +24,17 @@ public sealed class PatchingMod : ModInstance
         Lua.Replace("Tutorial1.lockDoor", (int x, int y, int z) => $"locked {x},{y},{z} in .NET");
         Lua.Define("WrenchTest.Typed", (JavaList<string> items) =>
             items.Add($"typed: count={items.Count} first={items[0]} upper={string.Join("|", items.Select(i => i.ToUpperInvariant()))}"));
+        Lua.Define("WrenchTest.Inspect", (ISBaseTimedAction action) =>
+            $"{(action is ISInventoryTransferAction ? nameof(ISInventoryTransferAction) : nameof(ISBaseTimedAction))} " +
+            $"maxTime={action.MaxTime} stopOnWalk={action.StopOnWalk} valid={action.IsValid()}");
+        Lua.Define("WrenchTest.Transfer", (IsoGameCharacter character) => new LoggedTransfer(character).Queue());
+        Lua.Define("WrenchTest.Sequence", (LuaSequence<string> items) => $"count={items.Count} first={items[0]} last={items[items.Count - 1]}");
+        Lua.Define("WrenchTest.Union", (OneOf<string, double, ISBaseTimedAction> value) => value switch
+        {
+            string text => $"text {text}",
+            double number => $"number {number}",
+            ISBaseTimedAction action => $"action maxTime={action.MaxTime}",
+        });
         Lua.Define("WrenchTest.QueueAction",
             (IsoGameCharacter character, string label) => new TestAction(character, label).Queue());
         Lua.Define("WrenchTest.OnCreate.MakePlate", (dynamic craftData, dynamic character) =>
