@@ -124,7 +124,7 @@ public class ModVettingTest
     {
         var configuration = AppContext.BaseDirectory.Contains("/Release/") ? "Release" : "Debug";
         var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..",
-            project, "bin", configuration, "net10.0", assembly));
+            project, "bin", configuration, "net11.0", assembly));
 
         Assert.AreEqual("", string.Join(" | ", ModVetting.Vet(path)));
     }

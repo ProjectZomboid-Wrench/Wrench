@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
@@ -34,10 +34,10 @@
         </PropertyGroup>
         <ItemGroup>
             <AgentJar Include="$(MSBuildThisFileDirectory)../Wrench.Agent/bin/$(Configuration)/net10.0/*.jar" />
-            <HostFiles Include="$(MSBuildThisFileDirectory)../Wrench.Host/bin/$(Configuration)/net10.0/**/*" />
-            <SampleModFiles Include="$(MSBuildThisFileDirectory)../Wrench.Tests.SampleMod/bin/$(Configuration)/net10.0/**/*" />
-            <BadModFiles Include="$(MSBuildThisFileDirectory)../Wrench.Tests.BadMod/bin/$(Configuration)/net10.0/**/*" />
-            <PzModFiles Include="$(MSBuildThisFileDirectory)../Wrench.Tests.PzMod/bin/$(Configuration)/net10.0/pzmod/**/*;$(MSBuildThisFileDirectory)../Wrench.Tests.FullTrustMod/bin/$(Configuration)/net10.0/pzmod/**/*;$(MSBuildThisFileDirectory)pzmods/**/*" />
+            <HostFiles Include="$(MSBuildThisFileDirectory)../Wrench.Host/bin/$(Configuration)/net11.0/**/*" />
+            <SampleModFiles Include="$(MSBuildThisFileDirectory)../Wrench.Tests.SampleMod/bin/$(Configuration)/net11.0/**/*" />
+            <BadModFiles Include="$(MSBuildThisFileDirectory)../Wrench.Tests.BadMod/bin/$(Configuration)/net11.0/**/*" />
+            <PzModFiles Include="$(MSBuildThisFileDirectory)../Wrench.Tests.PzMod/bin/$(Configuration)/net11.0/pzmod/**/*;$(MSBuildThisFileDirectory)../Wrench.Tests.FullTrustMod/bin/$(Configuration)/net11.0/pzmod/**/*;$(MSBuildThisFileDirectory)pzmods/**/*" />
         </ItemGroup>
         <Copy SourceFiles="@(AgentJar)" DestinationFolder="$(WrenchDistDir)" SkipUnchangedFiles="true" />
         <Copy SourceFiles="@(HostFiles)" DestinationFolder="$(WrenchDistDir)host/%(RecursiveDir)" SkipUnchangedFiles="true" />
