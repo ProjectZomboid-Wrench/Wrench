@@ -1,7 +1,8 @@
 // Checks Wrench.Agent's compile-only stubs against a PZ install: dotnet run tools/CheckAgentStubs.cs -- <projectzomboid.jar>
 // Run after game updates; a mismatch means the agent would fail to link at runtime.
-using System.Diagnostics;
+#:include Shared/Tool.cs
 using System.Text.RegularExpressions;
+using static Tool;
 
 if (args.Length < 1)
 {
@@ -50,14 +51,4 @@ static HashSet<(string Name, string Descriptor, bool IsStatic)> Members(string c
             members.Add((name.Groups[1].Value, descriptor.Groups[1].Value, declaration.Contains(" static ")));
     }
     return members;
-}
-
-static string Run(string file, string[] arguments)
-{
-    var process = Process.Start(new ProcessStartInfo(file, arguments) { RedirectStandardOutput = true })!;
-    var output = process.StandardOutput.ReadToEnd();
-    process.WaitForExit();
-    if (process.ExitCode != 0)
-        throw new InvalidOperationException($"{file} exited with {process.ExitCode}");
-    return output;
 }
