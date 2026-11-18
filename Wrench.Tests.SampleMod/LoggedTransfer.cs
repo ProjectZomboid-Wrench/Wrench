@@ -11,4 +11,7 @@ internal sealed class LoggedTransfer(IsoGameCharacter character) : ISInventoryTr
         Set("log", "C# isValid");
         return base.IsValid();
     }
+
+    public override void TriggerEvent(string @event, params object?[] args) =>
+        Set("event", $"{@event}({args.Length}: {string.Join(", ", args)})");
 }

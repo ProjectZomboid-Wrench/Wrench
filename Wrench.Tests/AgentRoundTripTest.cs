@@ -163,6 +163,7 @@ public class AgentRoundTripTest
         StringAssert.Contains(output, "inspect -> ISInventoryTransferAction maxTime=-1 stopOnWalk=True valid=True log=[vanilla transfer isValid]");
         StringAssert.Contains(output, "construct -> ISInventoryTransferAction subclass=False maxTime=-1");
         StringAssert.Contains(output, "subclassed Wrench.Tests.SampleMod.LoggedTransfer: isValid=true log=[C# isValid; vanilla transfer isValid]");
+        StringAssert.Contains(output, "triggerEvent -> hello(2: 42, x) | bare(0: )");
         StringAssert.Contains(output, "sequence -> count=3 first=a last=c");
         StringAssert.Contains(output, "union -> text hi | number 2.5 | action maxTime=-1");
     }

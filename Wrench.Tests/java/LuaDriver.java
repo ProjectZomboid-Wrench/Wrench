@@ -416,6 +416,11 @@ public final class LuaDriver {
         var subclassed = actionQueue.get(actionQueue.size() - 1);
         System.out.println("subclassed " + LuaManager.thread.tableget(subclassed, "Type") + ": isValid=" + method(subclassed, "isValid")
                 + " log=[" + subclassed.rawget("log") + "]");
+        var triggerEvent = LuaManager.thread.tableget(subclassed, "triggerEvent");
+        LuaManager.thread.pcall(triggerEvent, new Object[] {subclassed, "hello", 42.0, "x"});
+        System.out.print("triggerEvent -> " + subclassed.rawget("event"));
+        LuaManager.thread.pcall(triggerEvent, new Object[] {subclassed, "bare"});
+        System.out.println(" | " + subclassed.rawget("event"));
         actionQueue.clear();
 
         var result = LuaManager.thread.pcall(functions.rawget("Sequence"), new Object[] {LuaManager.env.rawget("Items")});
