@@ -15,7 +15,9 @@ internal static class PzMods
 {
     public const string ModInfoKey = "dotnet";
 
-    private sealed record PendingMod(string Id, string Name, string AssemblyPath, string Hash, List<string> Permissions);
+    private sealed record PendingMod(string Id, string Name, string[] Folders, Resolved Code, ModFiles Files);
+
+    private sealed record Resolved(string AssemblyPath, List<string> Permissions);
 
     private static readonly Logger Log = Logging.Log.For("Wrench.Host");
     private static readonly Dictionary<string, List<ModInstance>> Loaded = new(StringComparer.Ordinal);
@@ -52,7 +54,7 @@ internal static class PzMods
             }
         }
         foreach (var mod in Pending.Values)
-            PermissionPrompt.Request(mod.Id, mod.Name, mod.Permissions.Select(ModPermissions.Describe).ToList());
+            Request(mod);
     }
 
     private static void Start(string id, GameObject modInfoObject)
@@ -61,68 +63,103 @@ internal static class PzMods
         string? versionDir = info.getVersionDir();
         string? commonDir = info.getCommonDir();
         string? modDir = info.getDir();
-        var folders = new[] { versionDir, commonDir, modDir }.OfType<string>().Distinct().ToArray();
+        string name = info.getName() ?? id;
+        Start(id, name, new[] { versionDir, commonDir, modDir }.OfType<string>().Distinct().ToArray());
+    }
+
+    private static List<ModInstance>? Start(string id, string name, string[] folders)
+    {
+        if (Resolve(id, folders) is not { } code)
+            return null;
+        var (assemblyPath, permissions) = code;
+        if (permissions.Count == 0)
+        {
+            Log.Info($"Loading .NET mod {id} from {assemblyPath}");
+            return Loaded[id] = ModLoader.LoadAssembly(id, assemblyPath);
+        }
+
+        var files = ModFiles.Capture(assemblyPath);
+        switch (_trust!.Lookup(id, files.Hash, permissions))
+        {
+            case TrustStore.Decision.Allowed:
+                Log.Info($"Loading .NET mod {id} from {assemblyPath} with {string.Join(", ", permissions)} (approved earlier)");
+                return Loaded[id] = ModLoader.LoadAssembly(id, assemblyPath, files);
+            case TrustStore.Decision.Denied:
+                Log.Info($"Not loading .NET mod {id}: the player declined its permissions");
+                return null;
+            default:
+                Log.Info($".NET mod {id} is waiting for the player to approve {string.Join(", ", permissions)}");
+                Pending[id] = new PendingMod(id, name, folders, code, files);
+                return null;
+        }
+    }
+
+    private static Resolved? Resolve(string id, string[] folders)
+    {
         var modInfo = folders.Select(f => Path.Combine(f, "mod.info")).FirstOrDefault(File.Exists);
         var keys = modInfo is null ? new Dictionary<string, string>() : ReadKeys(modInfo);
         if (!keys.TryGetValue(ModInfoKey, out var entry))
-            return;
+            return null;
 
         var assemblyPath = folders.Select(f => Path.GetFullPath(Path.Combine(f, entry))).FirstOrDefault(File.Exists);
         if (assemblyPath is null)
         {
             Log.Error($"{id}: {ModInfoKey}={entry} not found under {string.Join(" or ", folders)}");
-            return;
+            return null;
         }
 
         var (permissions, unknown) = ModPermissions.Parse(keys.GetValueOrDefault(ModPermissions.ModInfoKey));
         if (unknown.Count > 0)
         {
             Log.Error($"Rejected {id}: unknown {ModPermissions.ModInfoKey} {string.Join(", ", unknown)}");
-            return;
+            return null;
         }
-        if (permissions.Count == 0)
-        {
-            Log.Info($"Loading .NET mod {id} from {assemblyPath}");
-            Loaded[id] = ModLoader.LoadAssembly(id, assemblyPath);
-            return;
-        }
-
-        var hash = TrustStore.HashMod(assemblyPath);
-        switch (_trust!.Lookup(id, hash, permissions))
-        {
-            case TrustStore.Decision.Allowed:
-                Log.Info($"Loading .NET mod {id} from {assemblyPath} with {string.Join(", ", permissions)} (approved earlier)");
-                Loaded[id] = ModLoader.LoadAssembly(id, assemblyPath, vet: false);
-                break;
-            case TrustStore.Decision.Denied:
-                Log.Info($"Not loading .NET mod {id}: the player declined its permissions");
-                break;
-            default:
-                Log.Info($".NET mod {id} is waiting for the player to approve {string.Join(", ", permissions)}");
-                Pending[id] = new PendingMod(id, info.getName() ?? id, assemblyPath, hash, permissions);
-                break;
-        }
+        return new Resolved(assemblyPath, permissions);
     }
 
-    /// <summary>The player's answer from the prompt: recorded, and if allowed the mod starts now.</summary>
+    /// <summary>
+    /// The player's answer from the prompt: recorded, and if allowed the mod starts now, from the snapshot the prompt
+    /// was raised for. If the mod changed while the prompt was open, the answer is discarded and it is evaluated anew.
+    /// </summary>
     public static bool Decide(string id, bool allow)
     {
         if (!Pending.Remove(id, out var mod))
             return false;
-        _trust!.Record(id, allow, mod.Hash, mod.Permissions);
-        if (!allow)
+        var permissions = mod.Code.Permissions;
+        if (!Unchanged(mod))
         {
-            Log.Info($"The player declined {string.Join(", ", mod.Permissions)} for .NET mod {id}");
+            Log.Warn($".NET mod {id} changed while the player was deciding; discarding the answer");
+            var started = Start(mod.Id, mod.Name, mod.Folders);
+            if (Pending.TryGetValue(id, out var again))
+                Request(again);
+            if (started is not null)
+                LuaEventRouter.InvokeNow(LuaEvents.OnGameBoot, started);
             return true;
         }
 
-        Log.Info($"The player allowed {string.Join(", ", mod.Permissions)} for .NET mod {id}; loading it");
-        var mods = ModLoader.LoadAssembly(id, mod.AssemblyPath, vet: false);
+        _trust!.Record(id, allow, mod.Files.Hash, permissions);
+        if (!allow)
+        {
+            Log.Info($"The player declined {string.Join(", ", permissions)} for .NET mod {id}");
+            return true;
+        }
+
+        Log.Info($"The player allowed {string.Join(", ", permissions)} for .NET mod {id}; loading it");
+        var mods = ModLoader.LoadAssembly(id, mod.Code.AssemblyPath, mod.Files);
         Loaded[id] = mods;
         // OnGameBoot already ran for this Lua load, so run the new mod's PatchLua callbacks now.
         LuaEventRouter.InvokeNow(LuaEvents.OnGameBoot, mods);
         return true;
     }
+
+    private static bool Unchanged(PendingMod mod) =>
+        Resolve(mod.Id, mod.Folders) is { } now
+        && now.AssemblyPath == mod.Code.AssemblyPath
+        && now.Permissions.Order(StringComparer.Ordinal).SequenceEqual(mod.Code.Permissions.Order(StringComparer.Ordinal))
+        && ModFiles.Capture(now.AssemblyPath).Hash == mod.Files.Hash;
+
+    private static void Request(PendingMod mod) =>
+        PermissionPrompt.Request(mod.Id, mod.Name, mod.Code.Permissions.Select(ModPermissions.Describe).ToList());
 
     private static Dictionary<string, string> ReadKeys(string modInfo)
     {

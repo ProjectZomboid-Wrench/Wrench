@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace Wrench.Host.Security;
@@ -38,20 +37,6 @@ internal sealed class TrustStore(string path)
         var temp = path + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(entries, Json));
         File.Move(temp, path, overwrite: true);
-    }
-
-    /// <summary>SHA-256 over every assembly in the mod's folder, names included, in a stable order.</summary>
-    public static string HashMod(string assemblyPath)
-    {
-        var directory = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(assemblyPath))!;
-        using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        foreach (var file in Directory.EnumerateFiles(directory, "*.dll", SearchOption.AllDirectories)
-                     .Order(StringComparer.Ordinal))
-        {
-            sha.AppendData(System.Text.Encoding.UTF8.GetBytes(System.IO.Path.GetRelativePath(directory, file) + "\n"));
-            sha.AppendData(File.ReadAllBytes(file));
-        }
-        return Convert.ToHexString(sha.GetHashAndReset());
     }
 
     // A missing or unreadable file means nothing has been decided; the player is simply asked again.

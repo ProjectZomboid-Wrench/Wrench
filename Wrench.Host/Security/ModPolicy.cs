@@ -107,6 +107,8 @@ internal static class ModPolicy
     {
         ["System.Runtime.CompilerServices.RuntimeHelpers"] = ["InitializeArray", "EnsureSufficientExecutionStack"],
         ["System.RuntimeTypeHandle"] = [],
+        // typeof(X) and comparing types, which records' generated Equals does; nothing that reflects.
+        ["System.Type"] = ["GetTypeFromHandle", "op_Equality", "op_Inequality"],
     };
 
     /// <summary>
@@ -117,6 +119,9 @@ internal static class ModPolicy
     [
         "GetType", "get_TargetSite", "get_Method", "get_Target", "GetMethodImpl", "DynamicInvoke", "CreateDelegate",
         "GetInvocationList",
+        // Process-wide state the host and other mods depend on (culture-sensitive formatting, Encoding.GetEncoding).
+        "set_CurrentCulture", "set_CurrentUICulture", "set_DefaultThreadCurrentCulture",
+        "set_DefaultThreadCurrentUICulture", "RegisterProvider",
     ];
 
     /// <summary>

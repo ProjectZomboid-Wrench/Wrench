@@ -19,9 +19,7 @@ internal static class ModVetting
     public static List<string> Vet(string assemblyPath)
     {
         var modDirectory = Path.GetDirectoryName(Path.GetFullPath(assemblyPath))!;
-        var modFiles = Directory.EnumerateFiles(modDirectory, "*.dll", SearchOption.AllDirectories)
-            .GroupBy(p => Path.GetFileNameWithoutExtension(p), StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var modFiles = ModFiles(modDirectory);
         // Two copies of one assembly name: the scan couldn't know which the runtime will load.
         var duplicates = modFiles.Where(g => g.Count() > 1).Select(g => $"ships {g.Key}.dll more than once").ToList();
         if (duplicates.Count > 0)
@@ -38,7 +36,8 @@ internal static class ModVetting
         if (violations.Count > 0)
             return violations;
 
-        var inspector = new AssemblyInspector(modAssemblies.Keys.ToHashSet(StringComparer.Ordinal));
+        var inspector = new AssemblyInspector(modAssemblies.Keys.ToHashSet(StringComparer.Ordinal),
+            frameworkAssemblies.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase));
         using var resolver = new Resolver(frameworkAssemblies, modAssemblies);
         var verifier = new Verifier(resolver, new VerifierOptions { SanityChecks = true });
         verifier.SetSystemModuleName(new AssemblyNameInfo("System.Private.CoreLib"));
@@ -50,6 +49,17 @@ internal static class ModVetting
         }
         return violations.Distinct().Take(MaxReported).ToList();
     }
+
+    /// <summary>
+    /// The DLLs in a restricted mod's folder by assembly name, as vetted; a mod's load context resolves nothing else.
+    /// </summary>
+    public static Dictionary<string, string> ModAssemblies(string modDirectory) =>
+        ModFiles(modDirectory).ToDictionary(g => g.Key, g => g.Single(), StringComparer.OrdinalIgnoreCase);
+
+    private static List<IGrouping<string, string>> ModFiles(string modDirectory) =>
+        Directory.EnumerateFiles(modDirectory, "*.dll", SearchOption.AllDirectories)
+            .GroupBy(p => Path.GetFileNameWithoutExtension(p), StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     private static IEnumerable<string> Verify(Verifier verifier, Resolver resolver, string name)
     {

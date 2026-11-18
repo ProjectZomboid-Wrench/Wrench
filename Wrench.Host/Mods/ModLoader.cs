@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.Loader;
 using Wrench.Host.Logging;
 using Wrench.Host.Security;
 
@@ -38,11 +37,11 @@ internal static class ModLoader
     }
 
     /// <summary>Loads one mod assembly into its own context and starts every <see cref="ModInstance"/> in it.</summary>
-    /// <param name="vet">False only for mods the player has granted full trust.</param>
-    public static List<ModInstance> LoadAssembly(string id, string assemblyPath, bool vet = true)
+    /// <param name="approved">The snapshot the player granted full trust to; loaded unvetted, and only from it.</param>
+    public static List<ModInstance> LoadAssembly(string id, string assemblyPath, ModFiles? approved = null)
     {
         var started = new List<ModInstance>();
-        var violations = vet ? ModVetting.Vet(assemblyPath) : [];
+        var violations = approved is null ? ModVetting.Vet(assemblyPath) : [];
         if (violations.Count > 0)
         {
             Log.Error($"Rejected {id}: it uses things mods aren't allowed to:{Environment.NewLine}  - " +
@@ -56,7 +55,10 @@ internal static class ModLoader
         Type[] modTypes;
         try
         {
-            assembly = new ModLoadContext(id, assemblyPath).LoadFromAssemblyPath(assemblyPath);
+            var context = approved is null
+                ? new ModLoadContext(id, assemblyPath, restricted: true)
+                : new ModLoadContext(id, assemblyPath, approved);
+            assembly = context.LoadMod(assemblyPath);
             modTypes = assembly.GetTypes()
                 .Where(t => t is { IsClass: true, IsAbstract: false } && t.IsSubclassOf(typeof(ModInstance)))
                 .ToArray();
@@ -94,29 +96,5 @@ internal static class ModLoader
             Log.Error($"Failed to set up {id}'s context menus", e);
         }
         return started;
-    }
-
-    private sealed class ModLoadContext(string id, string assemblyPath) : AssemblyLoadContext(id)
-    {
-        private static readonly Assembly[] SharedAssemblies =
-            [typeof(ModInstance).Assembly, typeof(Zomboid.Java.JavaObject).Assembly, typeof(Zomboid.Lua.LuaObject).Assembly];
-        private readonly AssemblyDependencyResolver _resolver = new(assemblyPath);
-
-        protected override Assembly? Load(AssemblyName name)
-        {
-            // Every mod must bind to the host's Wrench.Api and Wrench.Game.*, or ModInstance (and every game wrapper)
-            // would be a different type per mod.
-            var shared = SharedAssemblies.FirstOrDefault(a => a.GetName().Name == name.Name);
-            if (shared is not null)
-                return shared;
-            var path = _resolver.ResolveAssemblyToPath(name);
-            return path is null ? null : LoadFromAssemblyPath(path);
-        }
-
-        protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
-        {
-            var path = _resolver.ResolveUnmanagedDllToPath(unmanagedDllName);
-            return path is null ? IntPtr.Zero : LoadUnmanagedDllFromPath(path);
-        }
     }
 }

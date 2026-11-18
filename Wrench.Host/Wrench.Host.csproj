@@ -12,6 +12,7 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.ILVerification" Version="10.0.15" />
+        <PackageReference Include="Mono.Cecil" Version="0.11.6" />
         <InternalsVisibleTo Include="Wrench.Host.Tests" />
     </ItemGroup>
 
