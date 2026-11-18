@@ -273,8 +273,10 @@ internal sealed unsafe class LuaBridge : ILuaHost
         env.GetStaticMethodId(_wrenchLua, name, signature);
 
     /// <summary>Backs <see cref="GameObject.Keep"/>: a JNI global ref, valid until disposed.</summary>
-    private sealed class KeptScope : IGameObjectScope
+    private sealed class KeptScope : IKeptScope
     {
+        public string Origin => "a kept copy";
+
         public bool IsActive { get; private set; } = true;
 
         public int ThreadId { get; } = Environment.CurrentManagedThreadId;

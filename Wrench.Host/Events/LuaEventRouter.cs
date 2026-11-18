@@ -124,7 +124,7 @@ internal static unsafe class LuaEventRouter
 
             if (!Handlers.TryGetValue(eventName, out var registrations) || registrations.IsEmpty)
                 return;
-            using var scope = LuaScope.Enter(jEnv, mod: null);
+            using var scope = LuaScope.Enter(jEnv, mod: null, $"the {eventName} handler");
             var eventArgs = new LuaEventArgs(eventName, JavaValues.ToDotnet(jEnv, new _JObjectArray(args), scope));
             foreach (var registration in registrations)
             {
@@ -152,7 +152,7 @@ internal static unsafe class LuaEventRouter
         var hooks = HostHooks.GetValueOrDefault(eventName, []);
         if (hooks.IsEmpty)
             return;
-        using var scope = LuaScope.Enter(env, mod: null);
+        using var scope = LuaScope.Enter(env, mod: null, $"the {eventName} host hook");
         foreach (var hook in hooks)
         {
             try

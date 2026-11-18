@@ -12,10 +12,11 @@ internal sealed class LuaScope : IGameObjectScope, IDisposable
     [ThreadStatic] private static LuaScope? _current;
     private readonly LuaScope? _outer;
 
-    private LuaScope(JNIEnv env, ModInstance? mod, LuaScope? outer)
+    private LuaScope(JNIEnv env, ModInstance? mod, string origin, LuaScope? outer)
     {
         Env = env;
         Mod = mod;
+        Origin = origin;
         _outer = outer;
     }
 
@@ -28,11 +29,13 @@ internal sealed class LuaScope : IGameObjectScope, IDisposable
     /// <summary>The mod whose code is running; owns delegates converted to Lua functions.</summary>
     public ModInstance? Mod { get; set; }
 
+    public string Origin { get; }
+
     public bool IsActive { get; private set; } = true;
 
     public int ThreadId { get; } = Environment.CurrentManagedThreadId;
 
-    public static LuaScope Enter(JNIEnv env, ModInstance? mod) => _current = new LuaScope(env, mod, _current);
+    public static LuaScope Enter(JNIEnv env, ModInstance? mod, string origin) => _current = new LuaScope(env, mod, origin, _current);
 
     public string GetTypeName(nint handle) => JavaBoxing.GetClassName(Env, new _JObject(handle));
 

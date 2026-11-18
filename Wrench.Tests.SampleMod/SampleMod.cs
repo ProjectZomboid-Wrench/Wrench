@@ -16,7 +16,17 @@ public sealed class SampleMod : ModInstance
         });
 
         RegisterLuaEvent(LuaEvents.OnMainMenuEnter, () =>
-            Log.Info(_kept is { IsValid: false } ? "kept GameObject expired as expected" : "kept GameObject still valid"));
+        {
+            Log.Info(_kept is { IsValid: false } ? "kept GameObject expired as expected" : "kept GameObject still valid");
+            try
+            {
+                _ = _kept?.TypeName;
+            }
+            catch (ObjectDisposedException e)
+            {
+                Log.Info($"expired use: {e.Message}");
+            }
+        });
     }
 
     private static string Describe(object? value) => value switch

@@ -37,7 +37,7 @@ internal static class LuaFunctions
 
         try
         {
-            using var scope = LuaScope.Enter(jEnv, entry.Mod);
+            using var scope = LuaScope.Enter(jEnv, entry.Mod, $"the Lua call into {Describe(entry.Function)}");
             var luaArgs = JavaValues.ToDotnet(jEnv, new _JObjectArray(args), scope);
             var result = InvokeBound(entry.Function, luaArgs);
             if (entry.Function.Method.ReturnType == typeof(void))

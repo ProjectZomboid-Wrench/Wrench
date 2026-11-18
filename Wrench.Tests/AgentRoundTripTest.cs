@@ -27,6 +27,7 @@ public class AgentRoundTripTest
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: OnGameBoot(hi, 42, null, java.lang.StringBuilder:sb)");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: second arg as double: 42");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: kept GameObject expired as expected");
+        StringAssert.Contains(output, "INFO: expired use: This GameObject came from the OnGameBoot handler, which has returned.");
     }
 
     [TestMethod]

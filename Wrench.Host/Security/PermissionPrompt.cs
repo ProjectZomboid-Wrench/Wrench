@@ -55,7 +55,7 @@ internal static unsafe class PermissionPrompt
         var jEnv = JNIEnv.ForHandle(new _JNIEnv(env));
         try
         {
-            using var scope = LuaScope.Enter(jEnv, mod: null);
+            using var scope = LuaScope.Enter(jEnv, mod: null, "the permission decision");
             PzMods.Decide(jEnv.AsString(new _JString(modId)), allow != 0);
         }
         catch (Exception e)
