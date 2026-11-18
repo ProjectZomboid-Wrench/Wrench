@@ -10,7 +10,7 @@ public sealed class MenuMod : ModInstance
     public override void OnLoad() => PatchLua(() => Lua.Define("WrenchTest.Taste", (string state) =>
     {
         TasteCommand.State = state;
-        TasteCommand.Current?.NotifyCanExecuteChanged();
+        this.NotifyCanExecuteChanged<TasteCommand>();
     }));
 
     [InventoryCommand("ContextMenu_Serve", Item = "Test.Plate", CanExecute = nameof(CanServe))]
@@ -44,14 +44,13 @@ internal sealed class StirCommand : InventoryCommand<InventoryItem>
 
 internal sealed class TasteCommand : InventoryCommand<InventoryItem>
 {
-    internal static TasteCommand? Current;
     internal static string State = "locked";
-
-    public TasteCommand() => Current = this;
 
     public override string Text => "Taste";
 
     public override string? Item => "Test.Spoon";
+
+    public override string TextFor(InventoryItem spoon) => $"Taste ({spoon.GetFullType()})";
 
     public override CommandState CanExecute(InventoryItem spoon, IsoPlayer player) => State switch
     {

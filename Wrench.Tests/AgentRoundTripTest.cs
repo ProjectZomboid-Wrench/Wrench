@@ -147,8 +147,8 @@ public class AgentRoundTripTest
         StringAssert.Contains(output, "menu: <ContextMenu_Eat> | ");
         StringAssert.Contains(output, "| <ContextMenu_Serve> |");
         StringAssert.Contains(output, "| <ContextMenu_Reheat> (disabled) tooltip=<Tooltip_NoStove> |");
-        StringAssert.Contains(output, "| Stir tooltip=Found by the filler | Taste (disabled) tooltip=<Tooltip_Locked> | Gourmet (3 items) submenu");
-        StringAssert.Contains(output, "opened: <ContextMenu_Eat> | <ContextMenu_Serve> | <ContextMenu_Reheat> (disabled) tooltip=<Tooltip_NoStove> | Stir tooltip=Found by the filler | Taste | Gourmet (3 items) submenu");
+        StringAssert.Contains(output, "| Stir tooltip=Found by the filler | Taste (Test.Spoon) (disabled) tooltip=<Tooltip_Locked> | Gourmet (3 items) submenu");
+        StringAssert.Contains(output, "opened: <ContextMenu_Eat> | <ContextMenu_Serve> | <ContextMenu_Reheat> (disabled) tooltip=<Tooltip_NoStove> | Stir tooltip=Found by the filler | Taste (Test.Spoon) | Gourmet (3 items) submenu");
         StringAssert.Contains(output, "hidden: <ContextMenu_Eat> | <ContextMenu_Serve> | <ContextMenu_Reheat> (disabled) tooltip=<Tooltip_NoStove> | Stir tooltip=Found by the filler | Gourmet (3 items) submenu");
         StringAssert.Contains(output, "menu > Gourmet (3 items): Polish");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: eat overridden, original target plate");
