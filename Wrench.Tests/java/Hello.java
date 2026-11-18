@@ -16,6 +16,7 @@ public class Hello {
         LuaDriver.craftOnCreate("WrenchTest.OnCreate.MakePlate");
         LuaDriver.typedCall("Typed");
         LuaDriver.inventoryMenu();
+        LuaDriver.modOptions();
         LuaDriver.timedActions();
         LuaDriver.timedActions();
         LuaDriver.vanillaClasses();

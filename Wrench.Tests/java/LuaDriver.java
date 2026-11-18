@@ -59,6 +59,100 @@ public final class LuaDriver {
         env.rawset("isClient", (JavaFunction) (frame, n) -> frame.push(Boolean.FALSE));
         timedActionClasses();
         contextMenuClasses();
+        modOptionsApi();
+    }
+
+    // PZAPI.ModOptions as client/PZAPI/ModOptions.lua builds it: pages by id, options as tables with getValue.
+    private static void modOptionsApi() {
+        var pages = table();
+        var api = table();
+        api.rawset("create", (JavaFunction) (frame, n) -> {
+            var page = table();
+            var dict = table();
+            var data = table();
+            page.rawset("modOptionsID", frame.get(1));
+            page.rawset("name", frame.get(2));
+            page.rawset("dict", dict);
+            page.rawset("data", data);
+            for (var kind : new String[] {"Title", "Description", "Separator"}) {
+                page.rawset("add" + kind, (JavaFunction) (f, m) -> {
+                    var entry = table();
+                    entry.rawset("type", kind.toLowerCase());
+                    if (m > 1)
+                        entry.rawset("name", f.get(1));
+                    data.rawset((double) (size(data) + 1), entry);
+                    return 0;
+                });
+            }
+            page.rawset("addTickBox", option(dict, data, "tickbox", "value", 3));
+            page.rawset("addKeyBind", option(dict, data, "keybind", "key", 3));
+            page.rawset("addSlider", option(dict, data, "slider", "value", 6));
+            page.rawset("addTextEntry", option(dict, data, "textentry", "value", 3));
+            page.rawset("addComboBox", (JavaFunction) (f, m) -> {
+                var box = newOption(dict, data, "combobox", (String) f.get(1), f.get(2));
+                box.rawset("selected", 1.0);
+                box.rawset("values", table());
+                box.rawset("addItem", (JavaFunction) (g, k) -> {
+                    var values = (KahluaTable) box.rawget("values");
+                    values.rawset((double) (size(values) + 1), g.get(1));
+                    if (k > 2 && Boolean.TRUE.equals(g.get(2)))
+                        box.rawset("selected", (double) size(values));
+                    return 0;
+                });
+                box.rawset("getValue", (JavaFunction) (g, k) -> g.push(box.rawget("selected")));
+                return f.push(box);
+            });
+            pages.rawset(frame.get(1), page);
+            return frame.push(page);
+        });
+        api.rawset("getOptions", (JavaFunction) (frame, n) -> frame.push(pages.rawget(frame.get(1))));
+        var pzapi = table();
+        pzapi.rawset("ModOptions", api);
+        LuaManager.env.rawset("PZAPI", pzapi);
+    }
+
+    private static JavaFunction option(KahluaTable dict, KahluaTable data, String type, String field, int valueIndex) {
+        return (frame, n) -> {
+            var option = newOption(dict, data, type, (String) frame.get(1), frame.get(2));
+            option.rawset(field, frame.get(valueIndex));
+            option.rawset("getValue", (JavaFunction) (f, m) -> f.push(option.rawget(field)));
+            return frame.push(option);
+        };
+    }
+
+    private static KahluaTable newOption(KahluaTable dict, KahluaTable data, String type, String id, Object name) {
+        var option = table();
+        option.rawset("type", type);
+        option.rawset("id", id);
+        option.rawset("name", name);
+        data.rawset((double) (size(data) + 1), option);
+        dict.rawset(id, option);
+        return option;
+    }
+
+    /** Prints the sample mod's Mod Options page, changes two values the way the options screen would, and reads them back from C#. */
+    public static void modOptions() {
+        var getOptions = ((KahluaTable) ((KahluaTable) LuaManager.env.rawget("PZAPI")).rawget("ModOptions")).rawget("getOptions");
+        var page = (KahluaTable) LuaManager.thread.pcall(getOptions, new Object[] {null, "Wrench.Tests.SampleMod"})[1];
+        var data = (KahluaTable) page.rawget("data");
+        var entries = new StringBuilder();
+        for (var i = 1; i <= size(data); i++) {
+            var entry = (KahluaTable) data.rawget((double) i);
+            entries.append(i == 1 ? "" : " | ").append(entry.rawget("type")).append(' ').append(entry.rawget("id")).append(' ').append(entry.rawget("name"));
+        }
+        System.out.println("mod options " + page.rawget("modOptionsID") + " (" + page.rawget("name") + "): " + entries);
+        var read = ((KahluaTable) LuaManager.env.rawget("WrenchTest")).rawget("ReadOptions");
+        readOptions(read);
+        var dict = (KahluaTable) page.rawget("dict");
+        ((KahluaTable) dict.rawget("Enabled")).rawset("value", Boolean.FALSE);
+        ((KahluaTable) dict.rawget("Mode")).rawset("selected", 1.0);
+        readOptions(read);
+    }
+
+    private static void readOptions(Object read) {
+        var result = LuaManager.thread.pcall(read, new Object[0]);
+        if (result[0] != Boolean.TRUE)
+            System.out.println("ReadOptions failed: " + result[1]);
     }
 
     private static KahluaTable rootMenu;

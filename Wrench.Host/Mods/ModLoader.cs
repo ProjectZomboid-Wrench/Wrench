@@ -95,6 +95,14 @@ internal static class ModLoader
         {
             Log.Error($"Failed to set up {id}'s context menus", e);
         }
+        try
+        {
+            Zomboid.Lua.Options.ModOptions.Discover(assembly, started);
+        }
+        catch (Exception e)
+        {
+            Log.Error($"Failed to set up {id}'s mod options", e);
+        }
         return started;
     }
 }

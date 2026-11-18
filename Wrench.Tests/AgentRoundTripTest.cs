@@ -151,6 +151,10 @@ public class AgentRoundTripTest
         StringAssert.Contains(output, "opened: <ContextMenu_Eat> | <ContextMenu_Serve> | <ContextMenu_Reheat> (disabled) tooltip=<Tooltip_NoStove> | Stir tooltip=Found by the filler | Taste (Test.Spoon) | Gourmet (3 items) submenu");
         StringAssert.Contains(output, "hidden: <ContextMenu_Eat> | <ContextMenu_Serve> | <ContextMenu_Reheat> (disabled) tooltip=<Tooltip_NoStove> | Stir tooltip=Found by the filler | Gourmet (3 items) submenu");
         StringAssert.Contains(output, "menu > Gourmet (3 items): Polish");
+        StringAssert.Contains(output, "mod options Wrench.Tests.SampleMod (UI_Test_Title): title null UI_Test_General | tickbox Enabled UI_Test_Enabled | " +
+                                      "keybind Key UI_Test_Key | slider Speed Speed | separator null null | combobox Mode Mode | textentry Nickname Nickname");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: options: enabled=True key=35 speed=2.5 mode=2 name=Jane");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: options: enabled=False key=35 speed=2.5 mode=0 name=Jane");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: eat overridden, original target plate");
         StringAssert.Contains(output, "after clicks: served eaten plate for FakePlayer, polished, stirred");
     }
