@@ -14,13 +14,14 @@
         <PackageReference Include="Microsoft.ILVerification" Version="10.0.15" />
         <PackageReference Include="Mono.Cecil" Version="0.11.6" />
         <InternalsVisibleTo Include="Wrench.Host.Tests" />
+        <InternalsVisibleTo Include="Wrench.Samples.Tests" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\JNIBinding\src\JNIBinding\JNIBinding.csproj" />
-        <ProjectReference Include="..\Wrench.Api\Wrench.Api.csproj" />
-        <ProjectReference Include="..\Wrench.Game.Java\Wrench.Game.Java.csproj" />
-        <ProjectReference Include="..\Wrench.Game.Lua\Wrench.Game.Lua.csproj" />
+        <PackageReference Include="Wrench.Api" Version="$(WrenchApiVersion)" />
+        <PackageReference Include="Wrench.Game.Java" Version="$(WrenchGameJavaVersion)" />
+        <PackageReference Include="Wrench.Game.Lua" Version="$(WrenchGameLuaVersion)" />
     </ItemGroup>
 
 </Project>

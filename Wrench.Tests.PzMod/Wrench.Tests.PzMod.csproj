@@ -9,9 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Wrench.Api\Wrench.Api.csproj" Private="false" />
+        <PackageReference Include="Wrench.Api" Version="$(WrenchApiVersion)" ExcludeAssets="runtime" />
     </ItemGroup>
-
-    <Import Project="..\build\Wrench.PzMod.targets" />
 
 </Project>

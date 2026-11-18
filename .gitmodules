@@ -1,0 +1,3 @@
+[submodule "JNIBinding"]
+	path = JNIBinding
+	url = ../JNIBinding

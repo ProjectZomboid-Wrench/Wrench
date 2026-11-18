@@ -1,0 +1,17 @@
+<Project>
+
+    <!-- When checked out as a submodule, the superproject's feed and versions win. -->
+    <PropertyGroup>
+        <_WrenchParentProps>$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))</_WrenchParentProps>
+    </PropertyGroup>
+    <Import Project="$(_WrenchParentProps)" Condition="'$(_WrenchParentProps)' != ''" />
+
+    <PropertyGroup>
+        <WrenchPackages Condition="'$(WrenchPackages)' == ''">$(MSBuildThisFileDirectory)../packages/</WrenchPackages>
+        <RestoreAdditionalProjectSources>$(WrenchPackages)</RestoreAdditionalProjectSources>
+        <WrenchApiVersion Condition="'$(WrenchApiVersion)' == ''">0.1.0</WrenchApiVersion>
+        <WrenchGameJavaVersion Condition="'$(WrenchGameJavaVersion)' == ''">0.1.0</WrenchGameJavaVersion>
+        <WrenchGameLuaVersion Condition="'$(WrenchGameLuaVersion)' == ''">0.1.0</WrenchGameLuaVersion>
+    </PropertyGroup>
+
+</Project>
