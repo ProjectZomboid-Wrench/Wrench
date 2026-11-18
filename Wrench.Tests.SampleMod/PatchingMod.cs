@@ -28,6 +28,11 @@ public sealed class PatchingMod : ModInstance
             $"{(action is ISInventoryTransferAction ? nameof(ISInventoryTransferAction) : nameof(ISBaseTimedAction))} " +
             $"maxTime={action.MaxTime} stopOnWalk={action.StopOnWalk} valid={action.IsValid()}");
         Lua.Define("WrenchTest.Transfer", (IsoGameCharacter character) => new LoggedTransfer(character).Queue());
+        Lua.Define("WrenchTest.Construct", (IsoPlayer player) =>
+        {
+            var action = new ISInventoryTransferAction(player, null!, null!, null!);
+            return $"{action.Field<string>("Type")} subclass={action.IsSubclassInstance} maxTime={action.MaxTime}";
+        });
         Lua.Define("WrenchTest.Sequence", (LuaSequence<string> items) => $"count={items.Count} first={items[0]} last={items[items.Count - 1]}");
         Lua.Define("WrenchTest.Union", (OneOf<string, double, ISBaseTimedAction> value) => value switch
         {

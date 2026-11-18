@@ -71,6 +71,8 @@ public static unsafe class Entry
 
             var mods = ModLoader.LoadAll(ModsDirectory());
             Log.Info($"{mods.Count} Wrench-local mod(s) loaded");
+            // First: OnGameBoot follows every Lua reload, and objects from the old state must be let go before mods run.
+            LuaEventRouter.AddHostHook(LuaEvents.OnGameBoot, Zomboid.Lua.LuaClass.ReleaseStale);
             LuaEventRouter.AddHostHook(LuaEvents.OnGameBoot, AnnounceToLua);
             LuaEventRouter.AddHostHook(LuaEvents.OnGameBoot, () => PzMods.Sync(LuaBridge.Instance));
             LuaEventRouter.AddHostHook(LuaEvents.OnGameBoot,

@@ -410,6 +410,8 @@ public final class LuaDriver {
         System.out.println("inspect -> " + LuaManager.thread.pcall(functions.rawget("Inspect"), new Object[] {vanilla})[1]
                 + " log=[" + vanilla.rawget("log") + "]");
 
+        System.out.println("construct -> " + LuaManager.thread.pcall(functions.rawget("Construct"), new Object[] {new FakePlayer()})[1]);
+
         LuaManager.thread.pcall(functions.rawget("Transfer"), new Object[] {new FakePlayer()});
         var subclassed = actionQueue.get(actionQueue.size() - 1);
         System.out.println("subclassed " + LuaManager.thread.tableget(subclassed, "Type") + ": isValid=" + method(subclassed, "isValid")
