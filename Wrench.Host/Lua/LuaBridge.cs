@@ -14,15 +14,6 @@ internal sealed unsafe class LuaBridge : ILuaHost
     private static _JMethodID _getGlobal, _setGlobal, _index, _setIndex, _isTable, _newTable, _invoke, _getStatic, _function,
         _identityHashCode;
     private static _JObject _true, _false;
-    private static _JMethodID _resultBufferMethod;
-    [ThreadStatic] private static byte* _resultBuffer;
-
-    // Keep in sync with WrenchLua's kinds.
-    private enum ValueKind
-    {
-        Nil, Double, Boolean, Int, Long, Float, Short, Byte, Char, String, Object,
-    }
-
     // Calls with up to this many arguments use WrenchLua's fixed-arity entry points: no Object[], no boxed numbers.
     private const int MaxDirectArgs = 4;
     private static readonly _JMethodID[] InvokeN = new _JMethodID[MaxDirectArgs + 1];
@@ -57,7 +48,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
         _newTable = Static(env, "newTable", "()Ljava/lang/Object;");
         _invoke = Static(env, "invoke", "(ILjava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;");
         _getStatic = Static(env, "getStatic", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;");
-        _resultBufferMethod = Static(env, "resultBuffer", "()Ljava/nio/ByteBuffer;");
+        ValueBuffer.Initialize(env, _wrenchLua);
         _function = Static(env, "function", "(J)Ljava/lang/Object;");
 
         for (var arity = 0; arity <= MaxDirectArgs; arity++)
@@ -87,7 +78,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
         var result = Guard(() => CallObject(scope.Env, _getGlobal, temps.String(name)));
-        return ReadValue(scope, result);
+        return ValueBuffer.ReadOne(scope, result);
     }
 
     public void SetGlobal(ModInstance mod, string name, object? value)
@@ -115,7 +106,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
         using var temps = new Temps(scope.Env);
         var jKey = ToJava(scope, key, null, temps);
         var result = Guard(() => CallObject(scope.Env, _index, new _JObject(target.Handle), jKey));
-        return ReadValue(scope, result);
+        return ValueBuffer.ReadOne(scope, result);
     }
 
     public void SetIndex(ModInstance? mod, GameObject target, object key, object? value)
@@ -174,7 +165,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
     {
         var scope = LuaScope.Current;
         var result = Guard(() => CallObject(scope.Env, _getStatic, Name(scope.Env, table), Name(scope.Env, field)));
-        return ReadValue(scope, result);
+        return ValueBuffer.ReadOne(scope, result);
     }
 
     private static object?[] Invoke(LuaScope scope, Temps temps, ModInstance? mod, InvokeMode mode, _JObject target,
@@ -187,10 +178,10 @@ internal sealed unsafe class LuaBridge : ILuaHost
         if (args.Length > MaxDirectArgs)
         {
             jValues[3] = new _JValue(ToJavaArray(scope, args, mod, temps));
-            return ReadResults(scope, CallDirect(scope.Env, _invoke, jValues));
+            return ValueBuffer.ReadAll(scope, CallDirect(scope.Env, _invoke, jValues));
         }
         PackArgs(scope, args, mod, temps, jValues + 3);
-        return ReadResults(scope, CallDirect(scope.Env, InvokeN[args.Length], jValues));
+        return ValueBuffer.ReadAll(scope, CallDirect(scope.Env, InvokeN[args.Length], jValues));
     }
 
     // Fills the numbers mask then (object, double) per argument; numbers go as the double, so they aren't boxed over JNI.
@@ -351,92 +342,6 @@ internal sealed unsafe class LuaBridge : ILuaHost
         return env.CallStaticObjectMethod(_wrenchLua, _function, args);
     }
 
-    /// <summary>
-    /// Reads what a WrenchLua call reported: each value's kind and bits from the thread's result buffer (an int count,
-    /// then an int kind and 8 bytes of bits per value at 8 + 16 * i), strings and objects from <paramref name="returned"/>
-    /// (null, the only one, or an <c>Object[]</c> of them in order). A count of -1 means it holds every value instead.
-    /// </summary>
-    private static object?[] ReadResults(LuaScope scope, _JObject returned)
-    {
-        var env = scope.Env;
-        var buffer = ResultBuffer(env);
-        var count = *(int*)buffer;
-        if (count < 0)
-        {
-            var all = JavaValues.ToDotnet(env, new _JObjectArray(returned.Value), scope);
-            env.DeleteLocalRef(returned);
-            return all;
-        }
-        if (count == 0)
-            return [];
-
-        var objects = 0;
-        for (var i = 0; i < count; i++)
-        {
-            if (Kind(buffer, i) >= ValueKind.String)
-                objects++;
-        }
-        var values = new object?[count];
-        var next = 0;
-        for (var i = 0; i < count; i++)
-        {
-            var kind = Kind(buffer, i);
-            if (kind < ValueKind.String)
-                values[i] = Scalar(kind, Bits(buffer, i));
-            else
-                values[i] = Reference(scope, kind,
-                    objects == 1 ? returned : env.GetObjectArrayElement(new _JObjectArray(returned.Value), next++));
-        }
-        if (objects > 1)
-            env.DeleteLocalRef(returned);
-        return values;
-    }
-
-    private static object? ReadValue(LuaScope scope, _JObject returned)
-    {
-        var buffer = ResultBuffer(scope.Env);
-        var kind = Kind(buffer, 0);
-        return kind < ValueKind.String ? Scalar(kind, Bits(buffer, 0)) : Reference(scope, kind, returned);
-    }
-
-    private static byte* ResultBuffer(JNIEnv env)
-    {
-        if (_resultBuffer is null)
-        {
-            // WrenchLua's ThreadLocal keeps the buffer alive, so its address stays valid for the thread.
-            var buffer = env.CallStaticObjectMethod(_wrenchLua, _resultBufferMethod, null);
-            _resultBuffer = (byte*)env.GetDirectBufferAddress(buffer);
-            env.DeleteLocalRef(buffer);
-        }
-        return _resultBuffer;
-    }
-
-    private static ValueKind Kind(byte* buffer, int index) => (ValueKind)(*(int*)(buffer + 8 + 16 * index));
-
-    private static long Bits(byte* buffer, int index) => *(long*)(buffer + 16 + 16 * index);
-
-    private static object? Scalar(ValueKind kind, long bits) => kind switch
-    {
-        ValueKind.Nil => null,
-        ValueKind.Double => BitConverter.Int64BitsToDouble(bits),
-        ValueKind.Boolean => bits != 0,
-        ValueKind.Int => (int)bits,
-        ValueKind.Long => bits,
-        ValueKind.Float => BitConverter.Int32BitsToSingle((int)bits),
-        ValueKind.Short => (short)bits,
-        ValueKind.Byte => (sbyte)bits,
-        ValueKind.Char => (char)bits,
-        _ => throw new InvalidOperationException($"Unknown value kind {kind}"),
-    };
-
-    private static object Reference(LuaScope scope, ValueKind kind, _JObject obj)
-    {
-        if (kind == ValueKind.Object)
-            return new GameObject(scope, obj.Value);
-        var text = scope.Env.AsString(obj.AsString());
-        scope.Env.DeleteLocalRef(obj);
-        return text;
-    }
 
     private static _JObject CallObject(JNIEnv env, _JMethodID method, params _JObject[] args)
     {
@@ -521,6 +426,13 @@ internal sealed unsafe class LuaBridge : ILuaHost
         }
 
         public _JObject String(string value) => Add((_JObject)env.AsJString(value));
+
+        /// <summary>Stops tracking <paramref name="obj"/>, for a ref handed back to Java as a native method's result.</summary>
+        public _JObject Detach(_JObject obj)
+        {
+            _refs.Remove(obj);
+            return obj;
+        }
 
         public void Dispose()
         {

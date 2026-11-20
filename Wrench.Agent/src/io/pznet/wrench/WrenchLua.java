@@ -212,7 +212,7 @@ public final class WrenchLua {
         return put(buffer, 0, value) >= STRING ? value : null;
     }
 
-    private static Object encode(Object[] values) {
+    static Object encode(Object[] values) {
         var buffer = RESULTS.get();
         if (values.length > MAX_RESULTS) {
             buffer.putInt(0, -1);
@@ -234,6 +234,38 @@ public final class WrenchLua {
                 array[next++] = value;
         }
         return array;
+    }
+
+    /** Reads values the host wrote the same way, for its .NET functions' results. */
+    static Object[] decode(Object objects) {
+        var buffer = RESULTS.get();
+        var count = buffer.getInt(0);
+        if (count < 0)
+            return (Object[]) objects;
+        var references = 0;
+        for (var i = 0; i < count; i++) {
+            if (buffer.getInt(8 + 16 * i) >= STRING)
+                references++;
+        }
+        var values = new Object[count];
+        var next = 0;
+        for (var i = 0; i < count; i++) {
+            var kind = buffer.getInt(8 + 16 * i);
+            var bits = buffer.getLong(16 + 16 * i);
+            values[i] = switch (kind) {
+                case NIL -> null;
+                case DOUBLE -> Double.longBitsToDouble(bits);
+                case BOOLEAN -> bits != 0;
+                case INT -> (int) bits;
+                case LONG -> bits;
+                case FLOAT -> Float.intBitsToFloat((int) bits);
+                case SHORT -> (short) bits;
+                case BYTE -> (byte) bits;
+                case CHAR -> (char) bits;
+                default -> references == 1 ? objects : ((Object[]) objects)[next++];
+            };
+        }
+        return values;
     }
 
     private static int put(ByteBuffer buffer, int index, Object value) {

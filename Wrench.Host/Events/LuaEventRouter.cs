@@ -23,6 +23,11 @@ internal static unsafe class LuaEventRouter
     private static readonly ConcurrentDictionary<string, ImmutableArray<Action>> HostHooks = new();
     private static readonly Lock Gate = new();
 
+    // The agent identifies subscribed events by the id subscribe returned, so no name crosses JNI per dispatch.
+    private static readonly ConcurrentDictionary<int, string> EventNames = new();
+    private static readonly Func<object, string> HandlerOrigin = name => $"the {name} handler";
+    private static readonly Func<object, string> HostHookOrigin = name => $"the {name} host hook";
+
     /// <summary>
     /// Runs <paramref name="hook"/> on <paramref name="eventName"/> before its Lua callbacks and mod handlers, so mods
     /// the hook loads receive the same event.
@@ -102,20 +107,22 @@ internal static unsafe class LuaEventRouter
     {
         var env = Entry.CurrentEnv();
         var events = Entry.WrenchEventsClass;
-        var method = env.GetStaticMethodId(events, subscribe ? "subscribe" : "unsubscribe", "(Ljava/lang/String;Z)V");
         var name = env.AsJString(eventName);
         _JValue* args = stackalloc _JValue[] { new _JValue((_JObject)name), new _JValue(afterLua ? _JBoolean.True : _JBoolean.False) };
-        env.CallStaticVoidMethod(events, method, args);
+        if (subscribe)
+            EventNames[env.CallStaticIntMethod(events, env.GetStaticMethodId(events, "subscribe", "(Ljava/lang/String;Z)I"), args)] = eventName;
+        else
+            env.CallStaticVoidMethod(events, env.GetStaticMethodId(events, "unsubscribe", "(Ljava/lang/String;Z)V"), args);
         env.DeleteLocalRef((_JObject)name);
     }
 
     [UnmanagedCallersOnly]
-    internal static void OnLuaEvent(IntPtr env, IntPtr cls, IntPtr name, IntPtr args, byte afterLua)
+    internal static void OnLuaEvent(IntPtr env, IntPtr cls, int eventId, IntPtr args, byte afterLua)
     {
         var jEnv = JNIEnv.ForHandle(new _JNIEnv(env));
         try
         {
-            var eventName = jEnv.AsString(new _JString(name));
+            var eventName = EventNames[eventId];
             if (afterLua == 0)
             {
                 RunHostHooks(jEnv, eventName);
@@ -124,8 +131,8 @@ internal static unsafe class LuaEventRouter
 
             if (!Handlers.TryGetValue(eventName, out var registrations) || registrations.IsEmpty)
                 return;
-            using var scope = LuaScope.Enter(jEnv, mod: null, $"the {eventName} handler");
-            var eventArgs = new LuaEventArgs(eventName, JavaValues.ToDotnet(jEnv, new _JObjectArray(args), scope));
+            using var scope = LuaScope.Enter(jEnv, mod: null, eventName, HandlerOrigin);
+            var eventArgs = new LuaEventArgs(eventName, ValueBuffer.ReadAll(scope, new _JObject(args)));
             foreach (var registration in registrations)
             {
                 if (!registration.Mod.IsActive)
@@ -152,7 +159,7 @@ internal static unsafe class LuaEventRouter
         var hooks = HostHooks.GetValueOrDefault(eventName, []);
         if (hooks.IsEmpty)
             return;
-        using var scope = LuaScope.Enter(env, mod: null, $"the {eventName} host hook");
+        using var scope = LuaScope.Enter(env, mod: null, eventName, HostHookOrigin);
         foreach (var hook in hooks)
         {
             try

@@ -16,9 +16,7 @@ public final class DotnetFunction implements JavaFunction {
         var args = new Object[nArguments];
         for (var i = 0; i < nArguments; i++)
             args[i] = callFrame.get(i);
-        var results = WrenchNative.invokeFunction(id, args);
-        if (results == null)
-            return 0;
+        var results = WrenchLua.decode(WrenchNative.invokeFunction(id, WrenchLua.encode(args)));
         for (var result : results)
             callFrame.push(result);
         return results.length;
