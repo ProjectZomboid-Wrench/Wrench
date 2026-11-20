@@ -13,6 +13,16 @@ internal sealed unsafe class LuaBridge : ILuaHost
     private static _JClass _wrenchLua, _object, _system;
     private static _JMethodID _getGlobal, _setGlobal, _index, _setIndex, _isTable, _newTable, _call, _callMethod, _function,
         _identityHashCode;
+    private static _JObject _true, _false;
+
+    // Calls with up to this many arguments use WrenchLua's fixed-arity entry points: no Object[], no boxed numbers.
+    private const int MaxDirectArgs = 4;
+    private static readonly _JMethodID[] CallN = new _JMethodID[MaxDirectArgs + 1];
+    private static readonly _JMethodID[] CallMethodN = new _JMethodID[MaxDirectArgs + 1];
+
+    // Global refs to method names, which come from generated code and mods' literals, so the set stays small.
+    private static readonly Dictionary<string, _JObject> MethodNames = new(StringComparer.Ordinal);
+    private static readonly Lock MethodNamesGate = new();
 
     public static void Initialize(JavaRuntime runtime)
     {
@@ -35,6 +45,26 @@ internal sealed unsafe class LuaBridge : ILuaHost
         _call = Static(env, "call", "(Ljava/lang/Object;[Ljava/lang/Object;)[Ljava/lang/Object;");
         _callMethod = Static(env, "callMethod", "(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)[Ljava/lang/Object;");
         _function = Static(env, "function", "(J)Ljava/lang/Object;");
+
+        for (var arity = 0; arity <= MaxDirectArgs; arity++)
+        {
+            var args = arity == 0 ? "" : "I" + string.Concat(Enumerable.Repeat("Ljava/lang/Object;D", arity));
+            CallN[arity] = Static(env, $"call{arity}", $"(Ljava/lang/Object;{args})[Ljava/lang/Object;");
+            CallMethodN[arity] = Static(env, $"callMethod{arity}", $"(Ljava/lang/Object;Ljava/lang/String;{args})[Ljava/lang/Object;");
+        }
+
+        var booleanClass = env.FindClass("java/lang/Boolean");
+        _true = BooleanConstant(env, booleanClass, "TRUE");
+        _false = BooleanConstant(env, booleanClass, "FALSE");
+        env.DeleteLocalRef(booleanClass);
+    }
+
+    private static _JObject BooleanConstant(JNIEnv env, _JClass booleanClass, string name)
+    {
+        var local = env.GetStaticObjectField(booleanClass, env.GetStaticFieldID(booleanClass, name, "Ljava/lang/Boolean;"));
+        var global = env.NewGlobalRef(local);
+        env.DeleteLocalRef(local);
+        return global;
     }
 
     public ModInstance? CurrentMod => LuaScope.Current.Mod;
@@ -96,19 +126,84 @@ internal sealed unsafe class LuaBridge : ILuaHost
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
         var jFunction = ToJava(scope, function, mod, temps);
-        var jArgs = ToJavaArray(scope, args, mod, temps);
-        var results = Guard(() => CallObject(scope.Env, _call, jFunction, jArgs));
-        return Results(scope, results);
+        if (args.Length > MaxDirectArgs)
+        {
+            var jArgs = ToJavaArray(scope, args, mod, temps);
+            return Results(scope, Guard(() => CallObject(scope.Env, _call, jFunction, jArgs)));
+        }
+
+        var jValues = stackalloc _JValue[2 + 2 * MaxDirectArgs];
+        jValues[0] = new _JValue(jFunction);
+        PackArgs(scope, args, mod, temps, jValues + 1);
+        return Results(scope, CallDirect(scope.Env, CallN[args.Length], jValues));
     }
 
     public object?[] CallMethod(ModInstance? mod, GameObject target, string method, object?[] args)
     {
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
-        var jMethod = temps.String(method);
-        var jArgs = ToJavaArray(scope, args, mod, temps);
-        var results = Guard(() => CallObject(scope.Env, _callMethod, new _JObject(target.Handle), jMethod, jArgs));
-        return Results(scope, results);
+        var jMethod = MethodName(scope.Env, method);
+        if (args.Length > MaxDirectArgs)
+        {
+            var jArgs = ToJavaArray(scope, args, mod, temps);
+            return Results(scope, Guard(() => CallObject(scope.Env, _callMethod, new _JObject(target.Handle), jMethod, jArgs)));
+        }
+
+        var jValues = stackalloc _JValue[3 + 2 * MaxDirectArgs];
+        jValues[0] = new _JValue(new _JObject(target.Handle));
+        jValues[1] = new _JValue(jMethod);
+        PackArgs(scope, args, mod, temps, jValues + 2);
+        return Results(scope, CallDirect(scope.Env, CallMethodN[args.Length], jValues));
+    }
+
+    // Fills the numbers mask then (object, double) per argument; numbers go as the double, so they aren't boxed over JNI.
+    private static void PackArgs(LuaScope scope, object?[] args, ModInstance? mod, Temps temps, _JValue* slots)
+    {
+        if (args.Length == 0)
+            return;
+        var numbers = 0;
+        for (var i = 0; i < args.Length; i++)
+        {
+            var value = args[i] is System.Runtime.CompilerServices.IUnion union ? union.Value : args[i];
+            if (value is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or decimal)
+            {
+                numbers |= 1 << i;
+                slots[1 + 2 * i] = new _JValue(_JObject.Null);
+                slots[2 + 2 * i] = new _JValue(Convert.ToDouble(value));
+            }
+            else
+            {
+                slots[1 + 2 * i] = new _JValue(ToJava(scope, value, mod, temps));
+                slots[2 + 2 * i] = new _JValue(0d);
+            }
+        }
+        slots[0] = new _JValue(numbers);
+    }
+
+    private static _JObject CallDirect(JNIEnv env, _JMethodID method, _JValue* args)
+    {
+        try
+        {
+            return env.CallStaticObjectMethod(_wrenchLua, method, args);
+        }
+        catch (JavaThrowable e)
+        {
+            throw ToLuaException(e);
+        }
+    }
+
+    private static _JObject MethodName(JNIEnv env, string method)
+    {
+        lock (MethodNamesGate)
+        {
+            if (MethodNames.TryGetValue(method, out var cached))
+                return cached;
+            var local = (_JObject)env.AsJString(method);
+            var global = env.NewGlobalRef(local);
+            env.DeleteLocalRef(local);
+            MethodNames[method] = global;
+            return global;
+        }
     }
 
     public GameObject NewTable()
@@ -153,7 +248,9 @@ internal sealed unsafe class LuaBridge : ILuaHost
                 return new _JObject(view.View.Handle);
             case System.Runtime.CompilerServices.IUnion union:
                 return ToJava(scope, union.Value, mod, temps);
-            case string or bool:
+            case bool flag:
+                return flag ? _true : _false;
+            case string:
                 return temps.Add(JavaBoxing.Box(env, value));
             case char c:
                 return temps.String(c.ToString());

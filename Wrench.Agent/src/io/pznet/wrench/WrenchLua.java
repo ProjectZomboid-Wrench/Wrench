@@ -50,12 +50,70 @@ public final class WrenchLua {
 
     /** {@code target:method(args...)}. */
     public static Object[] callMethod(Object target, String method, Object[] args) {
-        var function = index(target, method);
-        if (function == null)
-            throw new LuaError("attempted to call method '" + method + "' (a nil value) on " + target);
         var withSelf = new Object[args.length + 1];
         withSelf[0] = target;
         System.arraycopy(args, 0, withSelf, 1, args.length);
+        return invokeMethod(target, method, withSelf);
+    }
+
+    // Fixed-arity entry points, so Wrench.Host needn't build an Object[] or box numbers over JNI: bit i of
+    // numbers says argument i is the double n<i> rather than the object a<i>.
+    public static Object[] call0(Object function) {
+        return call(function, new Object[0]);
+    }
+
+    public static Object[] call1(Object function, int numbers, Object a0, double n0) {
+        return call(function, new Object[] {arg(numbers, 0, a0, n0)});
+    }
+
+    public static Object[] call2(Object function, int numbers, Object a0, double n0, Object a1, double n1) {
+        return call(function, new Object[] {arg(numbers, 0, a0, n0), arg(numbers, 1, a1, n1)});
+    }
+
+    public static Object[] call3(Object function, int numbers, Object a0, double n0, Object a1, double n1,
+                                 Object a2, double n2) {
+        return call(function, new Object[] {arg(numbers, 0, a0, n0), arg(numbers, 1, a1, n1), arg(numbers, 2, a2, n2)});
+    }
+
+    public static Object[] call4(Object function, int numbers, Object a0, double n0, Object a1, double n1,
+                                 Object a2, double n2, Object a3, double n3) {
+        return call(function, new Object[] {arg(numbers, 0, a0, n0), arg(numbers, 1, a1, n1), arg(numbers, 2, a2, n2),
+                arg(numbers, 3, a3, n3)});
+    }
+
+    public static Object[] callMethod0(Object target, String method) {
+        return invokeMethod(target, method, new Object[] {target});
+    }
+
+    public static Object[] callMethod1(Object target, String method, int numbers, Object a0, double n0) {
+        return invokeMethod(target, method, new Object[] {target, arg(numbers, 0, a0, n0)});
+    }
+
+    public static Object[] callMethod2(Object target, String method, int numbers, Object a0, double n0,
+                                       Object a1, double n1) {
+        return invokeMethod(target, method, new Object[] {target, arg(numbers, 0, a0, n0), arg(numbers, 1, a1, n1)});
+    }
+
+    public static Object[] callMethod3(Object target, String method, int numbers, Object a0, double n0,
+                                       Object a1, double n1, Object a2, double n2) {
+        return invokeMethod(target, method, new Object[] {target, arg(numbers, 0, a0, n0), arg(numbers, 1, a1, n1),
+                arg(numbers, 2, a2, n2)});
+    }
+
+    public static Object[] callMethod4(Object target, String method, int numbers, Object a0, double n0,
+                                       Object a1, double n1, Object a2, double n2, Object a3, double n3) {
+        return invokeMethod(target, method, new Object[] {target, arg(numbers, 0, a0, n0), arg(numbers, 1, a1, n1),
+                arg(numbers, 2, a2, n2), arg(numbers, 3, a3, n3)});
+    }
+
+    private static Object arg(int numbers, int index, Object value, double number) {
+        return (numbers & (1 << index)) != 0 ? (Object) number : value;
+    }
+
+    private static Object[] invokeMethod(Object target, String method, Object[] withSelf) {
+        var function = index(target, method);
+        if (function == null)
+            throw new LuaError("attempted to call method '" + method + "' (a nil value) on " + target);
         return call(function, withSelf);
     }
 
