@@ -47,7 +47,7 @@ internal static class LuaFunctions
                 ValueBuffer.WriteNone(jEnv);
                 return IntPtr.Zero;
             }
-            using var temps = new LuaBridge.Temps(jEnv);
+            using var temps = LuaBridge.Temps.Rent(jEnv);
             // Returned to Java as a local ref of this native call, so it isn't released here.
             return ValueBuffer.WriteOne(scope, result, entry.Mod, temps).Value;
         }

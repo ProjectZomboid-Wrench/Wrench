@@ -79,47 +79,47 @@ internal sealed unsafe class LuaBridge : ILuaHost
     public object? GetGlobal(string name)
     {
         var scope = LuaScope.Current;
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         var jName = JavaString(scope.Env, name, temps);
-        var result = Guard(() => CallObject(scope.Env, _getGlobal, jName));
+        var result = CallObject(scope.Env, _getGlobal, jName);
         return ValueBuffer.ReadOne(scope, result);
     }
 
     public void SetGlobal(ModInstance mod, string name, object? value)
     {
         var scope = LuaScope.Current;
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         var jName = JavaString(scope.Env, name, temps);
         var jValue = ToJava(scope, value, mod, temps);
-        Guard(() => CallVoid(scope.Env, _setGlobal, jName, jValue));
+        CallVoid(scope.Env, _setGlobal, jName, jValue);
     }
 
     /// <summary>Sets a global on Wrench's own behalf; values may not contain delegates, which need an owning mod.</summary>
     public void SetHostGlobal(string name, object? value)
     {
         var scope = LuaScope.Current;
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         var jName = JavaString(scope.Env, name, temps);
         var jValue = ToJava(scope, value, null, temps);
-        Guard(() => CallVoid(scope.Env, _setGlobal, jName, jValue));
+        CallVoid(scope.Env, _setGlobal, jName, jValue);
     }
 
     public object? Index(GameObject target, object key)
     {
         var scope = LuaScope.Current;
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         var jKey = ToJava(scope, key, null, temps);
-        var result = Guard(() => CallObject(scope.Env, _index, new _JObject(target.Handle), jKey));
+        var result = CallObject(scope.Env, _index, new _JObject(target.Handle), jKey);
         return ValueBuffer.ReadOne(scope, result);
     }
 
     public void SetIndex(ModInstance? mod, GameObject target, object key, object? value)
     {
         var scope = LuaScope.Current;
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         var jKey = ToJava(scope, key, mod, temps);
         var jValue = ToJava(scope, value, mod, temps);
-        Guard(() => CallVoid(scope.Env, _setIndex, new _JObject(target.Handle), jKey, jValue));
+        CallVoid(scope.Env, _setIndex, new _JObject(target.Handle), jKey, jValue);
     }
 
     public bool IsTable(GameObject target)
@@ -132,21 +132,21 @@ internal sealed unsafe class LuaBridge : ILuaHost
     public object?[] Call(ModInstance? mod, object function, object?[] args)
     {
         var scope = LuaScope.Current;
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         return Invoke(scope, temps, mod, InvokeMode.Function, ToJava(scope, function, mod, temps), _JObject.Null, args);
     }
 
     public object?[] CallMethod(ModInstance? mod, GameObject target, string method, object?[] args)
     {
         var scope = LuaScope.Current;
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         return Invoke(scope, temps, mod, InvokeMode.Method, new _JObject(target.Handle), JavaString(scope.Env, method, temps), args);
     }
 
     public object?[] CallStatic(ModInstance? mod, string table, string function, object?[] args, bool optional = false)
     {
         var scope = LuaScope.Current;
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         return Invoke(scope, temps, mod, optional ? InvokeMode.StaticOptional : InvokeMode.Static, JavaString(scope.Env, table, temps),
             JavaString(scope.Env, function, temps), args);
     }
@@ -154,24 +154,24 @@ internal sealed unsafe class LuaBridge : ILuaHost
     public object?[] CallStaticMethod(ModInstance? mod, string table, string method, object?[] args)
     {
         var scope = LuaScope.Current;
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         return Invoke(scope, temps, mod, InvokeMode.StaticMethod, JavaString(scope.Env, table, temps), JavaString(scope.Env, method, temps), args);
     }
 
     public object?[] CallGlobal(ModInstance? mod, string name, object?[] args)
     {
         var scope = LuaScope.Current;
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         return Invoke(scope, temps, mod, InvokeMode.Global, _JObject.Null, JavaString(scope.Env, name, temps), args);
     }
 
     public object? GetStatic(string table, string field)
     {
         var scope = LuaScope.Current;
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         var jTable = JavaString(scope.Env, table, temps);
         var jField = JavaString(scope.Env, field, temps);
-        var result = Guard(() => CallObject(scope.Env, _getStatic, jTable, jField));
+        var result = CallObject(scope.Env, _getStatic, jTable, jField);
         return ValueBuffer.ReadOne(scope, result);
     }
 
@@ -185,10 +185,10 @@ internal sealed unsafe class LuaBridge : ILuaHost
         if (args.Length > MaxDirectArgs)
         {
             jValues[3] = new _JValue(ToJavaArray(scope, args, mod, temps));
-            return ValueBuffer.ReadAll(scope, CallDirect(scope.Env, _invoke, jValues));
+            return ValueBuffer.ReadAll(scope, CallObject(scope.Env, _invoke, jValues));
         }
         PackArgs(scope, args, mod, temps, jValues + 3);
-        return ValueBuffer.ReadAll(scope, CallDirect(scope.Env, InvokeN[args.Length], jValues));
+        return ValueBuffer.ReadAll(scope, CallObject(scope.Env, InvokeN[args.Length], jValues));
     }
 
     // Fills the numbers mask then (object, double) per argument; numbers go as the double, so they aren't boxed over JNI.
@@ -215,17 +215,6 @@ internal sealed unsafe class LuaBridge : ILuaHost
         slots[0] = new _JValue(numbers);
     }
 
-    private static _JObject CallDirect(JNIEnv env, _JMethodID method, _JValue* args)
-    {
-        try
-        {
-            return env.CallStaticObjectMethod(_wrenchLua, method, args);
-        }
-        catch (JavaThrowable e)
-        {
-            throw ToLuaException(e);
-        }
-    }
 
     private static _JObject JavaString(JNIEnv env, string text, Temps temps)
     {
@@ -250,7 +239,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
     public GameObject NewTable()
     {
         var scope = LuaScope.Current;
-        return new GameObject(scope, Guard(() => CallObject(scope.Env, _newTable)).Value);
+        return new GameObject(scope, CallObject(scope.Env, _newTable).Value);
     }
 
     public GameObject CreateFunction(ModInstance mod, Delegate function)
@@ -303,24 +292,24 @@ internal sealed unsafe class LuaBridge : ILuaHost
                 return temps.Add(NewFunction(env, mod ?? scope.Mod, function));
             case IDictionary dictionary:
             {
-                var table = temps.Add(Guard(() => CallObject(env, _newTable)));
+                var table = temps.Add(CallObject(env, _newTable));
                 foreach (DictionaryEntry entry in dictionary)
                 {
                     var key = ToJava(scope, entry.Key, mod, temps);
                     var item = ToJava(scope, entry.Value, mod, temps);
-                    Guard(() => CallVoid(env, _setIndex, table, key, item));
+                    CallVoid(env, _setIndex, table, key, item);
                 }
                 return table;
             }
             case IEnumerable sequence:
             {
-                var table = temps.Add(Guard(() => CallObject(env, _newTable)));
+                var table = temps.Add(CallObject(env, _newTable));
                 var index = 1;
                 foreach (var element in sequence)
                 {
                     var key = temps.Add(JavaBoxing.Box(env, (double)index++));
                     var item = ToJava(scope, element, mod, temps);
-                    Guard(() => CallVoid(env, _setIndex, table, key, item));
+                    CallVoid(env, _setIndex, table, key, item);
                 }
                 return table;
             }
@@ -332,7 +321,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
     /// <summary>Builds a Java <c>Object[]</c> for <paramref name="values"/>; the array itself is not recorded as a temp.</summary>
     public static _JObjectArray NewResultArray(LuaScope scope, object?[] values, ModInstance? mod)
     {
-        using var temps = new Temps(scope.Env);
+        using var temps = Temps.Rent(scope.Env);
         return BuildArray(scope, values, mod, temps);
     }
 
@@ -356,28 +345,27 @@ internal sealed unsafe class LuaBridge : ILuaHost
     }
 
 
-    private static _JObject CallObject(JNIEnv env, _JMethodID method, params _JObject[] args)
+    // Fixed arities, so a call allocates no argument array. WrenchLua reports Lua errors as LuaError; these surface
+    // them to mods as LuaException with just the Lua message.
+    private static _JObject CallObject(JNIEnv env, _JMethodID method) => CallObject(env, method, (_JValue*)null);
+
+    private static _JObject CallObject(JNIEnv env, _JMethodID method, _JObject a)
     {
-        var jArgs = stackalloc _JValue[Math.Max(args.Length, 1)];
-        for (var i = 0; i < args.Length; i++)
-            jArgs[i] = new _JValue(args[i]);
-        return env.CallStaticObjectMethod(_wrenchLua, method, jArgs);
+        var args = stackalloc _JValue[] { new _JValue(a) };
+        return CallObject(env, method, args);
     }
 
-    private static void CallVoid(JNIEnv env, _JMethodID method, params _JObject[] args)
+    private static _JObject CallObject(JNIEnv env, _JMethodID method, _JObject a, _JObject b)
     {
-        var jArgs = stackalloc _JValue[Math.Max(args.Length, 1)];
-        for (var i = 0; i < args.Length; i++)
-            jArgs[i] = new _JValue(args[i]);
-        env.CallStaticVoidMethod(_wrenchLua, method, jArgs);
+        var args = stackalloc _JValue[] { new _JValue(a), new _JValue(b) };
+        return CallObject(env, method, args);
     }
 
-    // WrenchLua reports Lua errors as LuaError; surface those to mods as LuaException with just the Lua message.
-    private static T Guard<T>(Func<T> call)
+    private static _JObject CallObject(JNIEnv env, _JMethodID method, _JValue* args)
     {
         try
         {
-            return call();
+            return env.CallStaticObjectMethod(_wrenchLua, method, args);
         }
         catch (JavaThrowable e)
         {
@@ -385,11 +373,29 @@ internal sealed unsafe class LuaBridge : ILuaHost
         }
     }
 
-    private static void Guard(Action call) => Guard(() =>
+    private static void CallVoid(JNIEnv env, _JMethodID method, _JObject a, _JObject b)
     {
-        call();
-        return 0;
-    });
+        var args = stackalloc _JValue[] { new _JValue(a), new _JValue(b) };
+        CallVoid(env, method, args);
+    }
+
+    private static void CallVoid(JNIEnv env, _JMethodID method, _JObject a, _JObject b, _JObject c)
+    {
+        var args = stackalloc _JValue[] { new _JValue(a), new _JValue(b), new _JValue(c) };
+        CallVoid(env, method, args);
+    }
+
+    private static void CallVoid(JNIEnv env, _JMethodID method, _JValue* args)
+    {
+        try
+        {
+            env.CallStaticVoidMethod(_wrenchLua, method, args);
+        }
+        catch (JavaThrowable e)
+        {
+            throw ToLuaException(e);
+        }
+    }
 
     private static LuaException ToLuaException(JavaThrowable e)
     {
@@ -427,30 +433,49 @@ internal sealed unsafe class LuaBridge : ILuaHost
     }
 
     /// <summary>Local refs created while converting arguments, released once the call is done.</summary>
-    internal sealed class Temps(JNIEnv env) : IDisposable
+    internal sealed class Temps : IDisposable
     {
-        private readonly List<_JObject> _refs = [];
+        // Pooled per thread, as every call needs one; nested calls take another off the list.
+        [ThreadStatic] private static Temps? _free;
+        private JNIEnv _env = null!;
+        private List<_JObject>? _refs;
+        private Temps? _next;
+
+        public static Temps Rent(JNIEnv env)
+        {
+            var temps = _free ?? new Temps();
+            _free = temps._next;
+            temps._env = env;
+            return temps;
+        }
 
         public _JObject Add(_JObject obj)
         {
             if (!obj.IsNull)
-                _refs.Add(obj);
+                (_refs ??= []).Add(obj);
             return obj;
         }
 
-        public _JObject String(string value) => Add((_JObject)env.AsJString(value));
+        public _JObject String(string value) => Add((_JObject)_env.AsJString(value));
 
         /// <summary>Stops tracking <paramref name="obj"/>, for a ref handed back to Java as a native method's result.</summary>
         public _JObject Detach(_JObject obj)
         {
-            _refs.Remove(obj);
+            _refs?.Remove(obj);
             return obj;
         }
 
         public void Dispose()
         {
-            foreach (var obj in _refs)
-                env.DeleteLocalRef(obj);
+            if (_refs is { Count: > 0 })
+            {
+                foreach (var obj in _refs)
+                    _env.DeleteLocalRef(obj);
+                _refs.Clear();
+            }
+            _env = null!;
+            _next = _free;
+            _free = this;
         }
     }
 }
