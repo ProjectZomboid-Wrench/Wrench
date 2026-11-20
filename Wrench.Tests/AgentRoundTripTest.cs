@@ -175,6 +175,16 @@ public class AgentRoundTripTest
                                       "keybind Key UI_Test_Key | slider Speed Speed | separator null null | combobox Mode Mode | textentry Nickname Nickname");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: options: enabled=True key=35 speed=2.5 mode=2 name=Jane");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: options: enabled=False key=35 speed=2.5 mode=0 name=Jane");
+        StringAssert.Contains(output, "| colorpicker Tint Tint | multipletickbox Flags Flags | button Reset Reset");
+        StringAssert.Contains(output, "name=Jane tint=OptionColor { R = 0, G = 0.5, B = 1, A = 1 } flags=True,False item=Auto");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: Enabled changing to True");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: Enabled applied True");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: Tint changing to OptionColor { R = 1, G = 0, B = 0, A = 1 }");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: Flags[1] applied True");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: options applied");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: reset clicked");
+        StringAssert.Contains(output, "mod options state: Nickname enabled=false South enabled=false items=Off,On,Auto,Later,Clicked speed=1.0");
+        StringAssert.Contains(output, "INFO: options: enabled=True key=35 speed=1 mode=0 name=Jane");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: eat overridden, original target plate");
         StringAssert.Contains(output, "after clicks: served eaten plate for FakePlayer, polished, stirred");
     }
