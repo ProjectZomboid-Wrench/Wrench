@@ -200,7 +200,9 @@ public final class WrenchLua {
     private static Object[] pcall(Object function, Object[] args) {
         if (function == null)
             throw new LuaError("attempted to call a nil value");
-        var result = LuaManager.thread.pcall(function, args);
+        var result = args.length > 0 ? FastJava.call(function, args[0], args, 1) : FastJava.NOT_FAST;
+        if (result == FastJava.NOT_FAST)
+            result = LuaManager.thread.pcall(function, args);
         if (result.length > 0 && Boolean.FALSE.equals(result[0]))
             throw new LuaError(result.length > 1 ? String.valueOf(result[1]) : "unknown Lua error");
         return result;
