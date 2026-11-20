@@ -11,7 +11,7 @@
         <RestoreAdditionalProjectSources>$(WrenchPackages)</RestoreAdditionalProjectSources>
         <WrenchApiVersion Condition="'$(WrenchApiVersion)' == ''">0.1.1</WrenchApiVersion>
         <WrenchGameJavaVersion Condition="'$(WrenchGameJavaVersion)' == ''">0.1.1</WrenchGameJavaVersion>
-        <WrenchGameLuaVersion Condition="'$(WrenchGameLuaVersion)' == ''">0.1.0</WrenchGameLuaVersion>
+        <WrenchGameLuaVersion Condition="'$(WrenchGameLuaVersion)' == ''">0.1.1</WrenchGameLuaVersion>
     </PropertyGroup>
 
 </Project>

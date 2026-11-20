@@ -34,7 +34,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
     // How WrenchLua.invoke finds the function; keep in sync with its modes.
     private enum InvokeMode
     {
-        Function, Method, Static, Global,
+        Function, Method, Static, Global, StaticMethod, StaticOptional,
     }
 
     public static void Initialize(JavaRuntime runtime)
@@ -148,11 +148,19 @@ internal sealed unsafe class LuaBridge : ILuaHost
         return Invoke(scope, temps, mod, InvokeMode.Method, new _JObject(target.Handle), Name(scope.Env, method), args);
     }
 
-    public object?[] CallStatic(ModInstance? mod, string table, string function, object?[] args)
+    public object?[] CallStatic(ModInstance? mod, string table, string function, object?[] args, bool optional = false)
     {
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
-        return Invoke(scope, temps, mod, InvokeMode.Static, Name(scope.Env, table), Name(scope.Env, function), args);
+        return Invoke(scope, temps, mod, optional ? InvokeMode.StaticOptional : InvokeMode.Static, Name(scope.Env, table),
+            Name(scope.Env, function), args);
+    }
+
+    public object?[] CallStaticMethod(ModInstance? mod, string table, string method, object?[] args)
+    {
+        var scope = LuaScope.Current;
+        using var temps = new Temps(scope.Env);
+        return Invoke(scope, temps, mod, InvokeMode.StaticMethod, Name(scope.Env, table), Name(scope.Env, method), args);
     }
 
     public object?[] CallGlobal(ModInstance? mod, string name, object?[] args)

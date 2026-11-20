@@ -51,18 +51,21 @@ public final class WrenchLua {
         return LuaManager.platform.newTable();
     }
 
-    // How invoke finds the function: target itself, target:name (with self), global table target's name, or global name.
-    static final int FUNCTION = 0, METHOD = 1, STATIC = 2, GLOBAL = 3;
+    // invoke's lookups: target, target:name, globals[target].name (nil allowed if optional), globals[target]:name, globals[name].
+    static final int FUNCTION = 0, METHOD = 1, STATIC = 2, GLOBAL = 3, STATIC_METHOD = 4, STATIC_OPTIONAL = 5;
 
     private static final Object[] NO_ARGS = new Object[0];
 
     /** Calls a function found per {@code mode}; reports its results, or throws {@link LuaError} if it raised one. */
     public static Object invoke(int mode, Object target, String name, Object[] args) {
-        var callee = callee(mode, target, name);
-        if (mode != METHOD)
+        var self = self(mode, target);
+        var callee = callee(mode, target, self, name);
+        if (callee == null)
+            return encode(NO_ARGS);
+        if (!hasSelf(mode))
             return encode(pcall(callee, args));
         var withSelf = new Object[args.length + 1];
-        withSelf[0] = target;
+        withSelf[0] = self;
         System.arraycopy(args, 0, withSelf, 1, args.length);
         return encode(pcall(callee, withSelf));
     }
@@ -74,40 +77,56 @@ public final class WrenchLua {
     }
 
     public static Object invoke1(int mode, Object target, String name, int numbers, Object a0, double n0) {
-        var args = args(mode, target, 1);
+        var self = self(mode, target);
+        var callee = callee(mode, target, self, name);
+        if (callee == null)
+            return encode(NO_ARGS);
+        var args = args(mode, self, 1);
         var at = args.length - 1;
         args[at] = arg(numbers, 0, a0, n0);
-        return encode(pcall(callee(mode, target, name), args));
+        return encode(pcall(callee, args));
     }
 
     public static Object invoke2(int mode, Object target, String name, int numbers, Object a0, double n0,
                                  Object a1, double n1) {
-        var args = args(mode, target, 2);
+        var self = self(mode, target);
+        var callee = callee(mode, target, self, name);
+        if (callee == null)
+            return encode(NO_ARGS);
+        var args = args(mode, self, 2);
         var at = args.length - 2;
         args[at] = arg(numbers, 0, a0, n0);
         args[at + 1] = arg(numbers, 1, a1, n1);
-        return encode(pcall(callee(mode, target, name), args));
+        return encode(pcall(callee, args));
     }
 
     public static Object invoke3(int mode, Object target, String name, int numbers, Object a0, double n0,
                                  Object a1, double n1, Object a2, double n2) {
-        var args = args(mode, target, 3);
+        var self = self(mode, target);
+        var callee = callee(mode, target, self, name);
+        if (callee == null)
+            return encode(NO_ARGS);
+        var args = args(mode, self, 3);
         var at = args.length - 3;
         args[at] = arg(numbers, 0, a0, n0);
         args[at + 1] = arg(numbers, 1, a1, n1);
         args[at + 2] = arg(numbers, 2, a2, n2);
-        return encode(pcall(callee(mode, target, name), args));
+        return encode(pcall(callee, args));
     }
 
     public static Object invoke4(int mode, Object target, String name, int numbers, Object a0, double n0,
                                  Object a1, double n1, Object a2, double n2, Object a3, double n3) {
-        var args = args(mode, target, 4);
+        var self = self(mode, target);
+        var callee = callee(mode, target, self, name);
+        if (callee == null)
+            return encode(NO_ARGS);
+        var args = args(mode, self, 4);
         var at = args.length - 4;
         args[at] = arg(numbers, 0, a0, n0);
         args[at + 1] = arg(numbers, 1, a1, n1);
         args[at + 2] = arg(numbers, 2, a2, n2);
         args[at + 3] = arg(numbers, 3, a3, n3);
-        return encode(pcall(callee(mode, target, name), args));
+        return encode(pcall(callee, args));
     }
 
     /** {@code table.field} on a global table. */
@@ -123,28 +142,40 @@ public final class WrenchLua {
         return (numbers & (1 << index)) != 0 ? (Object) number : value;
     }
 
-    private static Object[] args(int mode, Object target, int count) {
-        if (mode != METHOD)
+    private static boolean hasSelf(int mode) {
+        return mode == METHOD || mode == STATIC_METHOD;
+    }
+
+    private static Object self(int mode, Object target) {
+        return switch (mode) {
+            case METHOD -> target;
+            case STATIC_METHOD -> globalTable((String) target);
+            default -> null;
+        };
+    }
+
+    private static Object[] args(int mode, Object self, int count) {
+        if (!hasSelf(mode))
             return new Object[count];
         var args = new Object[count + 1];
-        args[0] = target;
+        args[0] = self;
         return args;
     }
 
-    // Error messages match what Wrench.Game.Java reported when it looked these up itself.
-    private static Object callee(int mode, Object target, String name) {
+    // Errors match what Wrench.Game.Java raised when it did these lookups; null means an optional static is missing.
+    private static Object callee(int mode, Object target, Object self, String name) {
         return switch (mode) {
             case FUNCTION -> target;
-            case METHOD -> {
-                var function = LuaManager.thread.tableget(target, name);
+            case METHOD, STATIC_METHOD -> {
+                var function = LuaManager.thread.tableget(self, name);
                 if (function == null)
-                    throw new LuaError("attempted to call method '" + name + "' (a nil value) on " + target);
+                    throw new LuaError("attempted to call method '" + name + "' (a nil value) on " + self);
                 yield function;
             }
-            case STATIC -> {
+            case STATIC, STATIC_OPTIONAL -> {
                 var table = (String) target;
                 var function = LuaManager.thread.tableget(globalTable(table), name);
-                if (function == null)
+                if (function == null && mode == STATIC)
                     throw new LuaError(table + "." + name + " is nil");
                 yield function;
             }
