@@ -1,6 +1,7 @@
 package io.pznet.wrench.bench;
 
 import io.pznet.wrench.WrenchEvents;
+import se.krka.kahlua.vm.JavaFunction;
 import se.krka.kahlua.vm.KahluaThread;
 import zombie.Lua.KahluaArrayConverter;
 import zombie.Lua.KahluaNumberConverter;
@@ -28,6 +29,7 @@ public final class BenchFixtures {
             exposer.setExposed(cls);
             exposer.exposeLikeJava(cls, LuaManager.env);
         }
+        LuaManager.env.rawset("benchGlobal", (JavaFunction) (frame, n) -> frame.push(1.0));
     }
 
     // Kahlua dereferences its owner thread, and BenchmarkDotNet's in-process runs use a new thread per benchmark.

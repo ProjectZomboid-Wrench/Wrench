@@ -57,6 +57,26 @@ public class TypedApiSuite
         return result;
     }
 
+    [Benchmark(OperationsPerInvoke = Ops, Description = "Color.HSBtoRGB(0.5f, 0.5f, 0.5f) -> wrapper")]
+    public Color HsbToRgb()
+    {
+        using var batch = new JavaBatch(_env);
+        Color result = null!;
+        for (var i = 0; i < Ops; i++)
+            result = Color.HSBtoRGB(0.5f, 0.5f, 0.5f);
+        return result;
+    }
+
+    [Benchmark(OperationsPerInvoke = Ops, Description = "new Color(0.5f, 0.25f, 0.125f, 1f)")]
+    public Color NewColor()
+    {
+        using var batch = new JavaBatch(_env);
+        Color result = null!;
+        for (var i = 0; i < Ops; i++)
+            result = new Color(0.5f, 0.25f, 0.125f, 1f);
+        return result;
+    }
+
     [Benchmark(OperationsPerInvoke = Ops, Description = "color.ChangeHSBValue(1, 1, 1)")]
     public void ChangeHsbValue()
     {

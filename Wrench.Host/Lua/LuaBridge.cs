@@ -11,7 +11,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
     public static readonly LuaBridge Instance = new();
 
     private static _JClass _wrenchLua, _object, _system;
-    private static _JMethodID _getGlobal, _setGlobal, _index, _setIndex, _isTable, _newTable, _call, _callMethod, _function,
+    private static _JMethodID _getGlobal, _setGlobal, _index, _setIndex, _isTable, _newTable, _invoke, _getStatic, _function,
         _identityHashCode;
     private static _JObject _true, _false;
     private static _JMethodID _resultBufferMethod;
@@ -25,12 +25,17 @@ internal sealed unsafe class LuaBridge : ILuaHost
 
     // Calls with up to this many arguments use WrenchLua's fixed-arity entry points: no Object[], no boxed numbers.
     private const int MaxDirectArgs = 4;
-    private static readonly _JMethodID[] CallN = new _JMethodID[MaxDirectArgs + 1];
-    private static readonly _JMethodID[] CallMethodN = new _JMethodID[MaxDirectArgs + 1];
+    private static readonly _JMethodID[] InvokeN = new _JMethodID[MaxDirectArgs + 1];
 
-    // Global refs to method names, which come from generated code and mods' literals, so the set stays small.
-    private static readonly Dictionary<string, _JObject> MethodNames = new(StringComparer.Ordinal);
-    private static readonly Lock MethodNamesGate = new();
+    // Global refs to method, table and global names, which come from generated code and mods' literals, so the set stays small.
+    private static readonly Dictionary<string, _JObject> Names = new(StringComparer.Ordinal);
+    private static readonly Lock NamesGate = new();
+
+    // How WrenchLua.invoke finds the function; keep in sync with its modes.
+    private enum InvokeMode
+    {
+        Function, Method, Static, Global,
+    }
 
     public static void Initialize(JavaRuntime runtime)
     {
@@ -50,16 +55,15 @@ internal sealed unsafe class LuaBridge : ILuaHost
         _setIndex = Static(env, "setIndex", "(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V");
         _isTable = Static(env, "isTable", "(Ljava/lang/Object;)Z");
         _newTable = Static(env, "newTable", "()Ljava/lang/Object;");
-        _call = Static(env, "call", "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
-        _callMethod = Static(env, "callMethod", "(Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;");
+        _invoke = Static(env, "invoke", "(ILjava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;");
+        _getStatic = Static(env, "getStatic", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;");
         _resultBufferMethod = Static(env, "resultBuffer", "()Ljava/nio/ByteBuffer;");
         _function = Static(env, "function", "(J)Ljava/lang/Object;");
 
         for (var arity = 0; arity <= MaxDirectArgs; arity++)
         {
             var args = arity == 0 ? "" : "I" + string.Concat(Enumerable.Repeat("Ljava/lang/Object;D", arity));
-            CallN[arity] = Static(env, $"call{arity}", $"(Ljava/lang/Object;{args})Ljava/lang/Object;");
-            CallMethodN[arity] = Static(env, $"callMethod{arity}", $"(Ljava/lang/Object;Ljava/lang/String;{args})Ljava/lang/Object;");
+            InvokeN[arity] = Static(env, $"invoke{arity}", $"(ILjava/lang/Object;Ljava/lang/String;{args})Ljava/lang/Object;");
         }
 
         var booleanClass = env.FindClass("java/lang/Boolean");
@@ -134,35 +138,51 @@ internal sealed unsafe class LuaBridge : ILuaHost
     {
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
-        var jFunction = ToJava(scope, function, mod, temps);
-        if (args.Length > MaxDirectArgs)
-        {
-            var jArgs = ToJavaArray(scope, args, mod, temps);
-            return ReadResults(scope, Guard(() => CallObject(scope.Env, _call, jFunction, jArgs)));
-        }
-
-        var jValues = stackalloc _JValue[2 + 2 * MaxDirectArgs];
-        jValues[0] = new _JValue(jFunction);
-        PackArgs(scope, args, mod, temps, jValues + 1);
-        return ReadResults(scope, CallDirect(scope.Env, CallN[args.Length], jValues));
+        return Invoke(scope, temps, mod, InvokeMode.Function, ToJava(scope, function, mod, temps), _JObject.Null, args);
     }
 
     public object?[] CallMethod(ModInstance? mod, GameObject target, string method, object?[] args)
     {
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
-        var jMethod = MethodName(scope.Env, method);
+        return Invoke(scope, temps, mod, InvokeMode.Method, new _JObject(target.Handle), Name(scope.Env, method), args);
+    }
+
+    public object?[] CallStatic(ModInstance? mod, string table, string function, object?[] args)
+    {
+        var scope = LuaScope.Current;
+        using var temps = new Temps(scope.Env);
+        return Invoke(scope, temps, mod, InvokeMode.Static, Name(scope.Env, table), Name(scope.Env, function), args);
+    }
+
+    public object?[] CallGlobal(ModInstance? mod, string name, object?[] args)
+    {
+        var scope = LuaScope.Current;
+        using var temps = new Temps(scope.Env);
+        return Invoke(scope, temps, mod, InvokeMode.Global, _JObject.Null, Name(scope.Env, name), args);
+    }
+
+    public object? GetStatic(string table, string field)
+    {
+        var scope = LuaScope.Current;
+        var result = Guard(() => CallObject(scope.Env, _getStatic, Name(scope.Env, table), Name(scope.Env, field)));
+        return ReadValue(scope, result);
+    }
+
+    private static object?[] Invoke(LuaScope scope, Temps temps, ModInstance? mod, InvokeMode mode, _JObject target,
+        _JObject name, object?[] args)
+    {
+        var jValues = stackalloc _JValue[4 + 2 * MaxDirectArgs];
+        jValues[0] = new _JValue((int)mode);
+        jValues[1] = new _JValue(target);
+        jValues[2] = new _JValue(name);
         if (args.Length > MaxDirectArgs)
         {
-            var jArgs = ToJavaArray(scope, args, mod, temps);
-            return ReadResults(scope, Guard(() => CallObject(scope.Env, _callMethod, new _JObject(target.Handle), jMethod, jArgs)));
+            jValues[3] = new _JValue(ToJavaArray(scope, args, mod, temps));
+            return ReadResults(scope, CallDirect(scope.Env, _invoke, jValues));
         }
-
-        var jValues = stackalloc _JValue[3 + 2 * MaxDirectArgs];
-        jValues[0] = new _JValue(new _JObject(target.Handle));
-        jValues[1] = new _JValue(jMethod);
-        PackArgs(scope, args, mod, temps, jValues + 2);
-        return ReadResults(scope, CallDirect(scope.Env, CallMethodN[args.Length], jValues));
+        PackArgs(scope, args, mod, temps, jValues + 3);
+        return ReadResults(scope, CallDirect(scope.Env, InvokeN[args.Length], jValues));
     }
 
     // Fills the numbers mask then (object, double) per argument; numbers go as the double, so they aren't boxed over JNI.
@@ -201,16 +221,16 @@ internal sealed unsafe class LuaBridge : ILuaHost
         }
     }
 
-    private static _JObject MethodName(JNIEnv env, string method)
+    private static _JObject Name(JNIEnv env, string name)
     {
-        lock (MethodNamesGate)
+        lock (NamesGate)
         {
-            if (MethodNames.TryGetValue(method, out var cached))
+            if (Names.TryGetValue(name, out var cached))
                 return cached;
-            var local = (_JObject)env.AsJString(method);
+            var local = (_JObject)env.AsJString(name);
             var global = env.NewGlobalRef(local);
             env.DeleteLocalRef(local);
-            MethodNames[method] = global;
+            Names[name] = global;
             return global;
         }
     }

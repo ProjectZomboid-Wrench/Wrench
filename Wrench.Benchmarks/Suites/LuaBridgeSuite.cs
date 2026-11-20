@@ -57,6 +57,50 @@ public class LuaBridgeSuite
         return count;
     }
 
+    [Benchmark(OperationsPerInvoke = Ops, Description = "Color.HSBtoRGB(...) via GetGlobal + Index + Call")]
+    public object? StaticThreeSteps()
+    {
+        using var batch = new JavaBatch(_env);
+        object? result = null;
+        for (var i = 0; i < Ops; i++)
+        {
+            var table = (GameObject)LuaBridge.Instance.GetGlobal("Color")!;
+            var function = LuaBridge.Instance.Index(table, "HSBtoRGB")!;
+            result = LuaBridge.Instance.Call(null, function, ThreeArgs)[0];
+        }
+        return result;
+    }
+
+    [Benchmark(OperationsPerInvoke = Ops, Description = "Color.HSBtoRGB(...) via CallStatic")]
+    public object? StaticOneStep()
+    {
+        using var batch = new JavaBatch(_env);
+        object? result = null;
+        for (var i = 0; i < Ops; i++)
+            result = LuaBridge.Instance.CallStatic(null, "Color", "HSBtoRGB", ThreeArgs)[0];
+        return result;
+    }
+
+    [Benchmark(OperationsPerInvoke = Ops, Description = "benchGlobal() via GetGlobal + Call")]
+    public object? GlobalTwoSteps()
+    {
+        using var batch = new JavaBatch(_env);
+        object? result = null;
+        for (var i = 0; i < Ops; i++)
+            result = LuaBridge.Instance.Call(null, LuaBridge.Instance.GetGlobal("benchGlobal")!, NoArgs)[0];
+        return result;
+    }
+
+    [Benchmark(OperationsPerInvoke = Ops, Description = "benchGlobal() via CallGlobal")]
+    public object? GlobalOneStep()
+    {
+        using var batch = new JavaBatch(_env);
+        object? result = null;
+        for (var i = 0; i < Ops; i++)
+            result = LuaBridge.Instance.CallGlobal(null, "benchGlobal", NoArgs)[0];
+        return result;
+    }
+
     [Benchmark(OperationsPerInvoke = Ops, Description = "color[\"getR\"] (index only)")]
     public object? Index()
     {
