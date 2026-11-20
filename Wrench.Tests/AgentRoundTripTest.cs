@@ -84,6 +84,17 @@ public class AgentRoundTripTest
     }
 
     [TestMethod]
+    public void Batched_Events_Arrive_Per_Boundary_And_Filter_In_Java()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: LoadGridsquare batch of 3: solid=a,c");
+        StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: LoadGridsquare batch of 1: solid=d");
+        Assert.IsGreaterThan(output.IndexOf("LoadGridsquare batch of 3", StringComparison.Ordinal),
+            output.IndexOf("IsoChunk added to the world", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void Call_Results_Keep_Their_Kinds()
     {
         var output = RunHello();

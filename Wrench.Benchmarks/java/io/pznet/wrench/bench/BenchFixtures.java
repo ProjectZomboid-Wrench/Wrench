@@ -25,7 +25,7 @@ public final class BenchFixtures {
         new KahluaArrayConverter(platform, converters).install();
         var exposer = new LuaManager.Exposer(converters, platform, LuaManager.env);
         LuaManager.exposer = exposer;
-        for (var cls : new Class<?>[] {Color.class, ArrayList.class}) {
+        for (var cls : new Class<?>[] {Color.class, ArrayList.class, BenchSquare.class}) {
             exposer.setExposed(cls);
             exposer.exposeLikeJava(cls, LuaManager.env);
         }
@@ -53,6 +53,23 @@ public final class BenchFixtures {
             if (result.length > 0 && Boolean.FALSE.equals(result[0]))
                 throw new IllegalStateException(name + " failed: " + (result.length > 1 ? result[1] : "?"));
         }
+    }
+
+    private static final BenchSquare[] SQUARES = new BenchSquare[1000];
+
+    static {
+        for (var i = 0; i < SQUARES.length; i++)
+            SQUARES[i] = new BenchSquare(i % 10 == 0);
+    }
+
+    // One "chunk" of squares, fired one event per square, optionally inside a batch boundary as IsoChunk's advice does.
+    public static void fireSquares(String name, boolean batched) {
+        if (batched)
+            WrenchEvents.openBatch();
+        for (var square : SQUARES)
+            WrenchEvents.dispatch(name, new Object[] {square}, true);
+        if (batched)
+            WrenchEvents.closeBatch();
     }
 
     public static void fireEvent(String name, Object arg, int times) {

@@ -52,6 +52,8 @@ public static unsafe class Entry
                 .Add("hello", "(Ljava/lang/String;)V", (delegate* unmanaged<IntPtr, IntPtr, IntPtr, void>)&Hello)
                 .Add("onLuaEvent", "(ILjava/lang/Object;Z)V",
                     (delegate* unmanaged<IntPtr, IntPtr, int, IntPtr, byte, void>)&LuaEventRouter.OnLuaEvent)
+                .Add("onLuaEventBatch", "(I[Ljava/lang/Object;)V",
+                    (delegate* unmanaged<IntPtr, IntPtr, int, IntPtr, void>)&LuaEventRouter.OnLuaEventBatch)
                 .Add("invokeFunction", "(JLjava/lang/Object;)Ljava/lang/Object;",
                     (delegate* unmanaged<IntPtr, IntPtr, long, IntPtr, IntPtr>)&LuaFunctions.Invoke)
                 .Add("onPermissionDecision", "(Ljava/lang/String;Z)V",

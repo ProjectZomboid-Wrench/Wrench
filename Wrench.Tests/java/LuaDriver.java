@@ -566,6 +566,9 @@ public final class LuaDriver {
         env.rawset("ArrayList", arrayList);
         var player = new FakePlayer();
 
+        new zombie.iso.IsoChunk(new FakeSquare("a", true), new FakeSquare("b", false), new FakeSquare("c", true)).doLoadGridsquare();
+        new Event("LoadGridsquare").trigger(null, null, new Object[] {new FakeSquare("d", true)});
+
         new Event("OnChallengeQuery").trigger(null, null, new Object[0]);
         var challenge = challenges.get(0);
         System.out.println("challenge id=" + challenge.rawget("id") + " name=" + challenge.rawget("name"));

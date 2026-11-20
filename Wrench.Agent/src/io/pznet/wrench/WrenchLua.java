@@ -2,6 +2,7 @@ package io.pznet.wrench;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
 import java.util.Arrays;
 import se.krka.kahlua.vm.KahluaTable;
 import zombie.Lua.LuaManager;
@@ -132,6 +133,37 @@ public final class WrenchLua {
     /** {@code table.field} on a global table. */
     public static Object getStatic(String table, String field) {
         return encode(LuaManager.thread.tableget(globalTable(table), field));
+    }
+
+    /** Argument {@code index} of each event in a batch; nil where it's missing or not a game object, so the host needn't check. */
+    public static Object[] column(Object[] events, int index) {
+        var column = new Object[events.length];
+        for (var i = 0; i < events.length; i++) {
+            var args = (Object[]) events[i];
+            var value = index < args.length ? args[index] : null;
+            column[i] = kind(value) == OBJECT ? value : null;
+        }
+        return column;
+    }
+
+    /** The targets for which {@code target:method(args...)} returns a truthy value, in order, as Lua would see them. */
+    public static Object[] filter(Object[] targets, String method, Object[] args) {
+        var kept = new ArrayList<Object>(targets.length);
+        var withSelf = new Object[args.length + 1];
+        for (var target : targets) {
+            if (target == null)
+                continue;
+            withSelf[0] = target;
+            System.arraycopy(args, 0, withSelf, 1, args.length);
+            var function = LuaManager.thread.tableget(target, method);
+            if (function == null)
+                throw new LuaError("attempted to call method '" + method + "' (a nil value) on " + target);
+            // pcall writes its results into the array it's given, so each call gets the arguments afresh.
+            var result = pcall(function, withSelf);
+            if (result.length > 1 && result[1] != null && !Boolean.FALSE.equals(result[1]))
+                kept.add(target);
+        }
+        return kept.toArray();
     }
 
     public static Object function(long id) {

@@ -12,7 +12,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
     public static readonly LuaBridge Instance = new();
 
     private static _JClass _wrenchLua, _object, _system;
-    private static _JMethodID _getGlobal, _setGlobal, _index, _setIndex, _isTable, _newTable, _invoke, _getStatic, _function,
+    private static _JMethodID _getGlobal, _setGlobal, _index, _setIndex, _isTable, _newTable, _invoke, _getStatic, _column, _filter, _function,
         _identityHashCode;
     private static _JObject _true, _false;
     // Calls with up to this many arguments use WrenchLua's fixed-arity entry points: no Object[], no boxed numbers.
@@ -51,6 +51,8 @@ internal sealed unsafe class LuaBridge : ILuaHost
         _newTable = Static(env, "newTable", "()Ljava/lang/Object;");
         _invoke = Static(env, "invoke", "(ILjava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/Object;");
         _getStatic = Static(env, "getStatic", "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;");
+        _column = Static(env, "column", "([Ljava/lang/Object;I)[Ljava/lang/Object;");
+        _filter = Static(env, "filter", "([Ljava/lang/Object;Ljava/lang/String;[Ljava/lang/Object;)[Ljava/lang/Object;");
         ValueBuffer.Initialize(env, _wrenchLua);
         _function = Static(env, "function", "(J)Ljava/lang/Object;");
 
@@ -163,6 +165,44 @@ internal sealed unsafe class LuaBridge : ILuaHost
         var scope = LuaScope.Current;
         using var temps = Temps.Rent(scope.Env);
         return Invoke(scope, temps, mod, InvokeMode.Global, _JObject.Null, JavaString(scope.Env, name, temps), args);
+    }
+
+    public int ArrayLength(GameObject array) => LuaScope.Current.Env.GetArrayLength(new _JArray(array.Handle));
+
+    public GameObject? ArrayObject(GameObject array, int index)
+    {
+        var scope = LuaScope.Current;
+        var element = scope.Env.GetObjectArrayElement(new _JObjectArray(array.Handle), index);
+        return element.IsNull ? null : new GameObject(scope, element.Value);
+    }
+
+    public object?[] BatchEventArgs(GameObject events, int index)
+    {
+        var scope = LuaScope.Current;
+        var args = scope.Env.GetObjectArrayElement(new _JObjectArray(events.Handle), index);
+        var values = JavaValues.ToDotnet(scope.Env, new _JObjectArray(args.Value), scope);
+        scope.Env.DeleteLocalRef(args);
+        return values;
+    }
+
+    public GameObject BatchColumn(GameObject events, int position)
+    {
+        var scope = LuaScope.Current;
+        var args = stackalloc _JValue[] { new _JValue(new _JObject(events.Handle)), new _JValue(position) };
+        return new GameObject(scope, CallObject(scope.Env, _column, args).Value);
+    }
+
+    public GameObject Filter(ModInstance? mod, GameObject targets, string method, object?[] args)
+    {
+        var scope = LuaScope.Current;
+        using var temps = Temps.Rent(scope.Env);
+        var jArgs = stackalloc _JValue[]
+        {
+            new _JValue(new _JObject(targets.Handle)),
+            new _JValue(JavaString(scope.Env, method, temps)),
+            new _JValue(ToJavaArray(scope, args, mod, temps)),
+        };
+        return new GameObject(scope, CallObject(scope.Env, _filter, jArgs).Value);
     }
 
     public object? GetStatic(string table, string field)

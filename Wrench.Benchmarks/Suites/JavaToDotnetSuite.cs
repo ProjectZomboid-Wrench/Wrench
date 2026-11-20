@@ -19,7 +19,9 @@ public unsafe class JavaToDotnetSuite
     private readonly BenchMod _mod = new();
     private readonly List<IDisposable> _registrations = [];
     private JNIEnv _env = null!;
-    private _JMethodID _callGlobal, _fireEvent;
+    private _JMethodID _callGlobal, _fireEvent, _fireSquares;
+    private static readonly object?[] NoArgs = [];
+    private int _solid;
     private _JObject _color, _number;
     private readonly Dictionary<string, _JObject> _names = [];
 
@@ -29,6 +31,7 @@ public unsafe class JavaToDotnetSuite
         _env = BenchJvm.Start();
         _callGlobal = _env.GetStaticMethodId(BenchJvm.Fixtures, "callGlobal", "(Ljava/lang/String;Ljava/lang/Object;I)V");
         _fireEvent = _env.GetStaticMethodId(BenchJvm.Fixtures, "fireEvent", "(Ljava/lang/String;Ljava/lang/Object;I)V");
+        _fireSquares = _env.GetStaticMethodId(BenchJvm.Fixtures, "fireSquares", "(Ljava/lang/String;Z)V");
         var number = JavaBoxing.Box(_env, 0.5);
         _number = _env.NewGlobalRef(number);
         _env.DeleteLocalRef(number);
@@ -40,6 +43,20 @@ public unsafe class JavaToDotnetSuite
         Function("benchTypedCall", (Func<Color, float>)(color => color.GetR()));
         Event("BenchEmpty", _ => { });
         Event("BenchTypedCall", e => ((GameObject)e[0]!).As<Color>().GetR());
+        Event("BenchSquare", e =>
+        {
+            if (LuaBridge.Instance.CallMethod(null, (GameObject)e[0]!, "isSolidTrans", NoArgs)[0] is true)
+                _solid++;
+        });
+        Batch("BenchSquareBatchEach", batch =>
+        {
+            foreach (var square in batch.Argument(0))
+            {
+                if (LuaBridge.Instance.CallMethod(null, square!, "isSolidTrans", NoArgs)[0] is true)
+                    _solid++;
+            }
+        });
+        Batch("BenchSquareBatchWhere", batch => _solid += batch.Argument(0).Where("isSolidTrans").Count);
     }
 
     [GlobalCleanup]
@@ -67,6 +84,27 @@ public unsafe class JavaToDotnetSuite
 
     [Benchmark(OperationsPerInvoke = Ops, Description = "event -> handler calling arg.GetR()")]
     public void EventTypedCall() => Drive(_fireEvent, "BenchTypedCall", _color);
+
+    [Benchmark(OperationsPerInvoke = Ops, Description = "square per event, isSolidTrans from C#")]
+    public void SquarePerEvent() => FireSquares("BenchSquare", batched: false);
+
+    [Benchmark(OperationsPerInvoke = Ops, Description = "square batch, isSolidTrans from C# per square")]
+    public void SquareBatchEach() => FireSquares("BenchSquareBatchEach", batched: true);
+
+    [Benchmark(OperationsPerInvoke = Ops, Description = "square batch, Where(isSolidTrans) in Java")]
+    public void SquareBatchWhere() => FireSquares("BenchSquareBatchWhere", batched: true);
+
+    private void FireSquares(string name, bool batched)
+    {
+        _JValue* args = stackalloc _JValue[] { new _JValue(_names[name]), new _JValue(batched ? _JBoolean.True : _JBoolean.False) };
+        _env.CallStaticVoidMethod(BenchJvm.Fixtures, _fireSquares, args);
+    }
+
+    private void Batch(string name, Action<LuaEventBatch> handler)
+    {
+        _registrations.Add(LuaEventRouter.RegisterBatch(_mod, name, handler));
+        AddName(name);
+    }
 
     private void Drive(_JMethodID method, string name, _JObject arg)
     {

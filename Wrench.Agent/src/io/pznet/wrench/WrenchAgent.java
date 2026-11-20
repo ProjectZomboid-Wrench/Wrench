@@ -28,6 +28,7 @@ public final class WrenchAgent {
         // Advice is inlined, so ByteBuddy never needs its sun.misc.Unsafe class injector (which JDK 24+ warns about).
         System.setProperty("net.bytebuddy.safe", "true");
         LuaEventHook.install(instrumentation);
+        EventBatches.install(instrumentation);
         GameStateHooks.install(instrumentation);
         // Must stay last: the transformer only fires for classes loaded after it's added.
         instrumentation.addTransformer(new AttachWhenVmReady(host, instrumentation));
