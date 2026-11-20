@@ -109,6 +109,8 @@ public static unsafe class Entry
         typeof(Entry).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0]
         ?? "unknown";
 
+    internal static JVM Vm => _vm ?? throw new InvalidOperationException("Wrench.Host isn't attached to a JVM");
+
     /// <summary>The calling thread's JNIEnv, attaching .NET-owned threads as daemons on first use.</summary>
     internal static JNIEnv CurrentEnv() =>
         (_vm ?? throw new InvalidOperationException("Wrench.Host isn't attached to a JVM")).GetOrAttachEnv(asDaemon: true);
