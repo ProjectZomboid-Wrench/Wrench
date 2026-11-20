@@ -19,14 +19,18 @@ internal static unsafe class LuaEventRouter
 
     private sealed record Registration(ModInstance Mod, Action<LuaEventArgs> Handler);
 
+    private sealed record BatchRegistration(ModInstance Mod, Action<LuaEventBatch> Handler);
+
     private static readonly ConcurrentDictionary<string, ImmutableArray<Registration>> Handlers = new();
     private static readonly ConcurrentDictionary<string, ImmutableArray<Action>> HostHooks = new();
+    private static readonly ConcurrentDictionary<string, ImmutableArray<BatchRegistration>> BatchHandlers = new();
     private static readonly Lock Gate = new();
 
     // The agent identifies subscribed events by the id subscribe returned, so no name crosses JNI per dispatch.
     private static readonly ConcurrentDictionary<int, string> EventNames = new();
     private static readonly Func<object, string> HandlerOrigin = name => $"the {name} handler";
     private static readonly Func<object, string> HostHookOrigin = name => $"the {name} host hook";
+    private static readonly Func<object, string> BatchOrigin = name => $"the {name} batch handler";
 
     /// <summary>
     /// Runs <paramref name="hook"/> on <paramref name="eventName"/> before its Lua callbacks and mod handlers, so mods
@@ -57,6 +61,84 @@ internal static unsafe class LuaEventRouter
         if (first)
             SetAgentSubscription(eventName, subscribe: true, afterLua: true);
         return new Unregistration(() => Unregister(eventName, registration));
+    }
+
+    public static IDisposable RegisterBatch(ModInstance mod, string eventName, Action<LuaEventBatch> handler)
+    {
+        var registration = new BatchRegistration(mod, handler);
+        bool first;
+        lock (Gate)
+        {
+            var existing = BatchHandlers.GetValueOrDefault(eventName, []);
+            first = existing.IsEmpty;
+            BatchHandlers[eventName] = existing.Add(registration);
+        }
+        if (first)
+            SetAgentBatchSubscription(eventName, subscribe: true);
+        return new Unregistration(() => UnregisterBatch(eventName, registration));
+    }
+
+    private static void UnregisterBatch(string eventName, BatchRegistration registration)
+    {
+        bool last;
+        lock (Gate)
+        {
+            if (!BatchHandlers.TryGetValue(eventName, out var existing))
+                return;
+            var remaining = existing.Remove(registration);
+            last = remaining.IsEmpty && !existing.IsEmpty;
+            if (remaining.IsEmpty)
+                BatchHandlers.TryRemove(eventName, out _);
+            else
+                BatchHandlers[eventName] = remaining;
+        }
+        if (last)
+            SetAgentBatchSubscription(eventName, subscribe: false);
+    }
+
+    private static void SetAgentBatchSubscription(string eventName, bool subscribe)
+    {
+        var env = Entry.CurrentEnv();
+        var events = Entry.WrenchEventsClass;
+        var name = env.AsJString(eventName);
+        _JValue* args = stackalloc _JValue[] { new _JValue((_JObject)name) };
+        if (subscribe)
+            EventNames[env.CallStaticIntMethod(events, env.GetStaticMethodId(events, "subscribeBatch", "(Ljava/lang/String;)I"), args)] = eventName;
+        else
+            env.CallStaticVoidMethod(events, env.GetStaticMethodId(events, "unsubscribeBatch", "(Ljava/lang/String;)V"), args);
+        env.DeleteLocalRef((_JObject)name);
+    }
+
+    [UnmanagedCallersOnly]
+    internal static void OnLuaEventBatch(IntPtr env, IntPtr cls, int eventId, IntPtr events)
+    {
+        var jEnv = JNIEnv.ForHandle(new _JNIEnv(env));
+        try
+        {
+            var eventName = EventNames[eventId];
+            if (!BatchHandlers.TryGetValue(eventName, out var registrations) || registrations.IsEmpty)
+                return;
+            using var scope = LuaScope.Enter(jEnv, mod: null, eventName, BatchOrigin);
+            var batch = new LuaEventBatch(eventName, new GameObject(scope, events));
+            foreach (var registration in registrations)
+            {
+                if (!registration.Mod.IsActive)
+                    continue;
+                scope.Mod = registration.Mod;
+                try
+                {
+                    registration.Handler(batch);
+                }
+                catch (Exception e)
+                {
+                    ModHost.Instance.Log(registration.Mod, LogLevel.Error, $"{eventName} batch handler failed", e);
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Entry.ThrowToJava(jEnv, e);
+        }
     }
 
     /// <summary>
