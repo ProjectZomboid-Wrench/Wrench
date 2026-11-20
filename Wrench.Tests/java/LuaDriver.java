@@ -3,6 +3,7 @@ import java.util.ArrayList;
 import java.util.List;
 import se.krka.kahlua.j2se.J2SEPlatform;
 import se.krka.kahlua.vm.JavaFunction;
+import se.krka.kahlua.vm.LuaCallFrame;
 import se.krka.kahlua.vm.KahluaTable;
 import se.krka.kahlua.vm.KahluaThread;
 import zombie.Lua.Event;
@@ -52,6 +53,18 @@ public final class LuaDriver {
         items.rawset(2.0, "b");
         items.rawset(3.0, "c");
         env.rawset("Items", items);
+
+        // First results that exercise each way WrenchLua reports values: scalars, nil, several objects, too many values.
+        env.rawset("ResultsMixed", (JavaFunction) (frame, n) -> pushAll(frame, 1.5, "two", new StringBuilder("three"), null, true));
+        env.rawset("ResultsNilFirst", (JavaFunction) (frame, n) -> pushAll(frame, null, new StringBuilder("obj")));
+        env.rawset("ResultsObjects", (JavaFunction) (frame, n) -> pushAll(frame, new StringBuilder("first"), new StringBuilder("second")));
+        env.rawset("ResultsMany", (JavaFunction) (frame, n) -> {
+            for (var i = 0; i < 70; i++)
+                frame.push(i + 0.5);
+            return 70;
+        });
+        env.rawset("ResultsText", (JavaFunction) (frame, n) -> pushAll(frame, "text", 2.0));
+        env.rawset("ResultsInt", (JavaFunction) (frame, n) -> pushAll(frame, 7));
 
         env.rawset("getActivatedMods", (JavaFunction) (frame, n) -> frame.push(new ArrayList<>(activeMods)));
         env.rawset("getModInfoByID", (JavaFunction) (frame, n) -> frame.push(modInfo((String) frame.get(0))));
@@ -573,6 +586,12 @@ public final class LuaDriver {
         System.out.println("Add -> " + call(challenge, "Add", 2.0, 40.0));
         var failed = LuaManager.thread.pcall(challenge.rawget("Fail"), new Object[0]);
         System.out.println("Fail -> ok=" + failed[0] + " error=" + failed[1]);
+    }
+
+    private static int pushAll(LuaCallFrame frame, Object... values) {
+        for (var value : values)
+            frame.push(value);
+        return values.length;
     }
 
     private static Object call(KahluaTable table, String name, Object... args) {
