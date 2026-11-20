@@ -281,7 +281,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
 
         public int ThreadId { get; } = Environment.CurrentManagedThreadId;
 
-        public string GetTypeName(nint handle) => JavaBoxing.GetClassName(LuaScope.Current.Env, new _JObject(handle));
+        public string GetTypeName(nint handle) => JavaClassNames.Of(LuaScope.Current.Env, new _JObject(handle));
 
         public string Describe(nint handle) => JavaBoxing.ToJavaString(LuaScope.Current.Env, new _JObject(handle));
 

@@ -37,7 +37,7 @@ internal sealed class LuaScope : IGameObjectScope, IDisposable
 
     public static LuaScope Enter(JNIEnv env, ModInstance? mod, string origin) => _current = new LuaScope(env, mod, origin, _current);
 
-    public string GetTypeName(nint handle) => JavaBoxing.GetClassName(Env, new _JObject(handle));
+    public string GetTypeName(nint handle) => JavaClassNames.Of(Env, new _JObject(handle));
 
     public string Describe(nint handle) => JavaBoxing.ToJavaString(Env, new _JObject(handle));
 

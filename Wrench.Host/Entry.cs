@@ -61,6 +61,7 @@ public static unsafe class Entry
             ReportToAgent(runtime);
 
             LuaBridge.Initialize(runtime);
+            JavaClassNames.Initialize(runtime);
             LuaHost.Instance = LuaBridge.Instance;
 
             var events = runtime.FindSystemClass("io.pznet.wrench.WrenchEvents");
