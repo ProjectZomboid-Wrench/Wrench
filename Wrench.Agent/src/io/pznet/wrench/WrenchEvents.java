@@ -17,6 +17,7 @@ public final class WrenchEvents {
     private static final Map<String, Integer> AFTER = new ConcurrentHashMap<>();
     private static final Map<String, Integer> BATCHED = new ConcurrentHashMap<>();
     private static final ThreadLocal<Batch> BATCH = ThreadLocal.withInitial(Batch::new);
+    private static final Map<String, java.util.Set<String>> FLUSHED_AT = new ConcurrentHashMap<>();
 
     /** The events collected on this thread while inside batch boundary methods. */
     private static final class Batch {
@@ -54,16 +55,31 @@ public final class WrenchEvents {
 
     public static void closeBatch() {
         var batch = BATCH.get();
-        if (--batch.depth > 0 || batch.pending.isEmpty())
+        if (--batch.depth > 0)
             return;
-        for (var entry : batch.pending.entrySet()) {
-            var events = entry.getValue();
-            if (events.isEmpty())
-                continue;
-            var array = events.toArray(new Object[0]);
-            events.clear();
-            deliver(entry.getKey(), array);
+        for (var id : batch.pending.keySet())
+            deliverPending(batch, id);
+    }
+
+    /** At a flush point ("class#method"): delivers the batches of the events that flush there, if any are pending. */
+    public static void flushBatch(String method) {
+        var batch = BATCH.get();
+        if (batch.depth == 0 || batch.pending.isEmpty())
+            return;
+        for (var name : FLUSHED_AT.computeIfAbsent(method, EventBatches::eventsFlushedAt)) {
+            var id = BATCHED.get(name);
+            if (id != null)
+                deliverPending(batch, id);
         }
+    }
+
+    private static void deliverPending(Batch batch, int id) {
+        var events = batch.pending.get(id);
+        if (events == null || events.isEmpty())
+            return;
+        var array = events.toArray(new Object[0]);
+        events.clear();
+        deliver(id, array);
     }
 
     // The game may reuse an event's argument array, so a batch keeps its own copy.

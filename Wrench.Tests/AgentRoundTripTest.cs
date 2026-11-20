@@ -90,6 +90,8 @@ public class AgentRoundTripTest
 
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: LoadGridsquare batch of 3: solid=a,c");
         StringAssert.Contains(output, "[Wrench.Tests.SampleMod] INFO: LoadGridsquare batch of 1: solid=d");
+        Assert.IsGreaterThan(output.IndexOf("LoadGridsquare batch of 3", StringComparison.Ordinal),
+            output.IndexOf("IsoChunk added to the world", StringComparison.Ordinal));
     }
 
     [TestMethod]
