@@ -63,11 +63,11 @@ public final class WrenchLua {
         if (callee == null)
             return encode(NO_ARGS);
         if (!hasSelf(mode))
-            return encode(pcall(callee, args));
+            return encodeResults(pcall(callee, args));
         var withSelf = new Object[args.length + 1];
         withSelf[0] = self;
         System.arraycopy(args, 0, withSelf, 1, args.length);
-        return encode(pcall(callee, withSelf));
+        return encodeResults(pcall(callee, withSelf));
     }
 
     // Fixed-arity entry points, so Wrench.Host needn't build an Object[] or box numbers over JNI: bit i of
@@ -84,7 +84,7 @@ public final class WrenchLua {
         var args = args(mode, self, 1);
         var at = args.length - 1;
         args[at] = arg(numbers, 0, a0, n0);
-        return encode(pcall(callee, args));
+        return encodeResults(pcall(callee, args));
     }
 
     public static Object invoke2(int mode, Object target, String name, int numbers, Object a0, double n0,
@@ -97,7 +97,7 @@ public final class WrenchLua {
         var at = args.length - 2;
         args[at] = arg(numbers, 0, a0, n0);
         args[at + 1] = arg(numbers, 1, a1, n1);
-        return encode(pcall(callee, args));
+        return encodeResults(pcall(callee, args));
     }
 
     public static Object invoke3(int mode, Object target, String name, int numbers, Object a0, double n0,
@@ -111,7 +111,7 @@ public final class WrenchLua {
         args[at] = arg(numbers, 0, a0, n0);
         args[at + 1] = arg(numbers, 1, a1, n1);
         args[at + 2] = arg(numbers, 2, a2, n2);
-        return encode(pcall(callee, args));
+        return encodeResults(pcall(callee, args));
     }
 
     public static Object invoke4(int mode, Object target, String name, int numbers, Object a0, double n0,
@@ -126,7 +126,7 @@ public final class WrenchLua {
         args[at + 1] = arg(numbers, 1, a1, n1);
         args[at + 2] = arg(numbers, 2, a2, n2);
         args[at + 3] = arg(numbers, 3, a3, n3);
-        return encode(pcall(callee, args));
+        return encodeResults(pcall(callee, args));
     }
 
     /** {@code table.field} on a global table. */
@@ -196,14 +196,18 @@ public final class WrenchLua {
         return table;
     }
 
+    // Kahlua's pcall returns {true, results...} or {false, message, stacktrace, ...}; returned as is, status first.
     private static Object[] pcall(Object function, Object[] args) {
         if (function == null)
             throw new LuaError("attempted to call a nil value");
         var result = LuaManager.thread.pcall(function, args);
-        // Kahlua's pcall returns {true, results...} or {false, message, stacktrace, ...}.
         if (result.length > 0 && Boolean.FALSE.equals(result[0]))
             throw new LuaError(result.length > 1 ? String.valueOf(result[1]) : "unknown Lua error");
-        return result.length == 0 ? result : Arrays.copyOfRange(result, 1, result.length);
+        return result;
+    }
+
+    private static Object encodeResults(Object[] pcallResult) {
+        return pcallResult.length == 0 ? encode(pcallResult) : encode(pcallResult, 1);
     }
 
     private static Object encode(Object value) {
@@ -213,25 +217,31 @@ public final class WrenchLua {
     }
 
     static Object encode(Object[] values) {
+        return encode(values, 0);
+    }
+
+    /** Encodes {@code values[from..]}, so callers needn't copy an array to drop a prefix. */
+    static Object encode(Object[] values, int from) {
         var buffer = RESULTS.get();
-        if (values.length > MAX_RESULTS) {
+        var count = values.length - from;
+        if (count > MAX_RESULTS) {
             buffer.putInt(0, -1);
-            return values;
+            return from == 0 ? values : Arrays.copyOfRange(values, from, values.length);
         }
-        buffer.putInt(0, values.length);
+        buffer.putInt(0, count);
         var objects = 0;
         Object first = null;
-        for (var i = 0; i < values.length; i++) {
-            if (put(buffer, i, values[i]) >= STRING && objects++ == 0)
-                first = values[i];
+        for (var i = 0; i < count; i++) {
+            if (put(buffer, i, values[from + i]) >= STRING && objects++ == 0)
+                first = values[from + i];
         }
         if (objects <= 1)
             return first;
         var array = new Object[objects];
         var next = 0;
-        for (var value : values) {
-            if (kind(value) >= STRING)
-                array[next++] = value;
+        for (var i = from; i < values.length; i++) {
+            if (kind(values[i]) >= STRING)
+                array[next++] = values[i];
         }
         return array;
     }
