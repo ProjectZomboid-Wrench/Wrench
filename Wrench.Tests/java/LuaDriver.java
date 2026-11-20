@@ -113,8 +113,52 @@ public final class LuaDriver {
                     return 0;
                 });
                 box.rawset("getValue", (JavaFunction) (g, k) -> g.push(box.rawget("selected")));
+                box.rawset("setValue", (JavaFunction) (g, k) -> { box.rawset("selected", g.get(1)); return 0; });
                 return f.push(box);
             });
+            page.rawset("addColorPicker", (JavaFunction) (f, m) -> {
+                var picker = newOption(dict, data, "colorpicker", (String) f.get(1), f.get(2));
+                var color = table();
+                color.rawset("r", f.get(3));
+                color.rawset("g", f.get(4));
+                color.rawset("b", f.get(5));
+                color.rawset("a", f.get(6));
+                picker.rawset("color", color);
+                picker.rawset("getValue", (JavaFunction) (g, k) -> g.push(picker.rawget("color")));
+                picker.rawset("setValue", (JavaFunction) (g, k) -> { picker.rawset("color", g.get(1)); return 0; });
+                return f.push(picker);
+            });
+            page.rawset("addMultipleTickBox", (JavaFunction) (f, m) -> {
+                var boxes = newOption(dict, data, "multipletickbox", (String) f.get(1), f.get(2));
+                var values = table();
+                boxes.rawset("values", values);
+                boxes.rawset("addTickBox", (JavaFunction) (g, k) -> {
+                    var value = table();
+                    value.rawset("name", g.get(1));
+                    value.rawset("value", g.get(2));
+                    value.rawset("isEnabled", Boolean.TRUE);
+                    values.rawset((double) (size(values) + 1), value);
+                    return 0;
+                });
+                boxes.rawset("getValue", (JavaFunction) (g, k) -> g.push(((KahluaTable) values.rawget(g.get(1))).rawget("value")));
+                boxes.rawset("setValue", (JavaFunction) (g, k) -> { ((KahluaTable) values.rawget(g.get(1))).rawset("value", g.get(2)); return 0; });
+                boxes.rawset("setEnabled", (JavaFunction) (g, k) -> {
+                    for (var i = 1; i <= size(values); i++) {
+                        var value = (KahluaTable) values.rawget((double) i);
+                        if (value.rawget("name").equals(g.get(1)))
+                            value.rawset("isEnabled", g.get(2));
+                    }
+                    return 0;
+                });
+                return f.push(boxes);
+            });
+            page.rawset("addButton", (JavaFunction) (f, m) -> {
+                var button = newOption(dict, data, "button", (String) f.get(1), f.get(2));
+                button.rawset("onclick", f.get(4));
+                button.rawset("target", f.get(5));
+                return f.push(button);
+            });
+            page.rawset("apply", (JavaFunction) (f, m) -> 0);
             pages.rawset(frame.get(1), page);
             return frame.push(page);
         });
@@ -129,6 +173,7 @@ public final class LuaDriver {
             var option = newOption(dict, data, type, (String) frame.get(1), frame.get(2));
             option.rawset(field, frame.get(valueIndex));
             option.rawset("getValue", (JavaFunction) (f, m) -> f.push(option.rawget(field)));
+            option.rawset("setValue", (JavaFunction) (f, m) -> { option.rawset(field, f.get(1)); return 0; });
             return frame.push(option);
         };
     }
@@ -140,6 +185,8 @@ public final class LuaDriver {
         option.rawset("name", name);
         data.rawset((double) (size(data) + 1), option);
         dict.rawset(id, option);
+        option.rawset("isEnabled", Boolean.TRUE);
+        option.rawset("setEnabled", (JavaFunction) (f, m) -> { option.rawset("isEnabled", f.get(1)); return 0; });
         return option;
     }
 
@@ -160,6 +207,40 @@ public final class LuaDriver {
         ((KahluaTable) dict.rawget("Enabled")).rawset("value", Boolean.FALSE);
         ((KahluaTable) dict.rawget("Mode")).rawset("selected", 1.0);
         readOptions(read);
+
+        // The player edits options and applies them, then presses the button, as MainOptions would.
+        var enabled = (KahluaTable) dict.rawget("Enabled");
+        callField(enabled, "onChange", enabled, Boolean.TRUE);
+        callField(enabled, "onChangeApply", enabled, Boolean.TRUE);
+        enabled.rawset("value", Boolean.TRUE);
+        var tint = (KahluaTable) dict.rawget("Tint");
+        var red = table();
+        red.rawset("r", 1.0);
+        red.rawset("g", 0.0);
+        red.rawset("b", 0.0);
+        red.rawset("a", 1.0);
+        callField(tint, "onChange", tint, red);
+        var flags = (KahluaTable) dict.rawget("Flags");
+        callField(flags, "onChangeApply", flags, 2.0, Boolean.TRUE);
+        callField(page, "apply", page);
+        var reset = (KahluaTable) dict.rawget("Reset");
+        callField(reset, "onclick", reset.rawget("target"), reset);
+
+        var modeValues = (KahluaTable) ((KahluaTable) dict.rawget("Mode")).rawget("values");
+        var items = new StringBuilder();
+        for (var i = 1; i <= size(modeValues); i++)
+            items.append(i == 1 ? "" : ",").append(modeValues.rawget((double) i));
+        var south = (KahluaTable) ((KahluaTable) flags.rawget("values")).rawget(2.0);
+        System.out.println("mod options state: Nickname enabled=" + ((KahluaTable) dict.rawget("Nickname")).rawget("isEnabled")
+                + " South enabled=" + south.rawget("isEnabled") + " items=" + items
+                + " speed=" + ((KahluaTable) dict.rawget("Speed")).rawget("value"));
+        readOptions(read);
+    }
+
+    private static void callField(KahluaTable table, String field, Object... args) {
+        var result = LuaManager.thread.pcall(table.rawget(field), args);
+        if (result[0] != Boolean.TRUE)
+            System.out.println(field + " failed: " + result[1]);
     }
 
     private static void readOptions(Object read) {
