@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Collections;
 using JNIBinding;
 using JNIBinding.Bindings.Native.Types;
@@ -18,9 +19,11 @@ internal sealed unsafe class LuaBridge : ILuaHost
     private const int MaxDirectArgs = 4;
     private static readonly _JMethodID[] InvokeN = new _JMethodID[MaxDirectArgs + 1];
 
-    // Global refs to method, table and global names, which come from generated code and mods' literals, so the set stays small.
-    private static readonly Dictionary<string, _JObject> Names = new(StringComparer.Ordinal);
-    private static readonly Lock NamesGate = new();
+    // Global refs to short strings (names, keys, literal arguments), so repeats don't make a Java string per use. The
+    // cap bounds what run-time strings can pin; past it, and for longer strings, each use makes its own.
+    private const int MaxCachedStrings = 4096, MaxCachedLength = 64;
+    private static readonly ConcurrentDictionary<string, _JObject> Strings = new(StringComparer.Ordinal);
+    private static readonly Lock StringsGate = new();
 
     // How WrenchLua.invoke finds the function; keep in sync with its modes.
     private enum InvokeMode
@@ -77,7 +80,8 @@ internal sealed unsafe class LuaBridge : ILuaHost
     {
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
-        var result = Guard(() => CallObject(scope.Env, _getGlobal, temps.String(name)));
+        var jName = JavaString(scope.Env, name, temps);
+        var result = Guard(() => CallObject(scope.Env, _getGlobal, jName));
         return ValueBuffer.ReadOne(scope, result);
     }
 
@@ -85,7 +89,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
     {
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
-        var jName = temps.String(name);
+        var jName = JavaString(scope.Env, name, temps);
         var jValue = ToJava(scope, value, mod, temps);
         Guard(() => CallVoid(scope.Env, _setGlobal, jName, jValue));
     }
@@ -95,7 +99,7 @@ internal sealed unsafe class LuaBridge : ILuaHost
     {
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
-        var jName = temps.String(name);
+        var jName = JavaString(scope.Env, name, temps);
         var jValue = ToJava(scope, value, null, temps);
         Guard(() => CallVoid(scope.Env, _setGlobal, jName, jValue));
     }
@@ -136,35 +140,38 @@ internal sealed unsafe class LuaBridge : ILuaHost
     {
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
-        return Invoke(scope, temps, mod, InvokeMode.Method, new _JObject(target.Handle), Name(scope.Env, method), args);
+        return Invoke(scope, temps, mod, InvokeMode.Method, new _JObject(target.Handle), JavaString(scope.Env, method, temps), args);
     }
 
     public object?[] CallStatic(ModInstance? mod, string table, string function, object?[] args, bool optional = false)
     {
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
-        return Invoke(scope, temps, mod, optional ? InvokeMode.StaticOptional : InvokeMode.Static, Name(scope.Env, table),
-            Name(scope.Env, function), args);
+        return Invoke(scope, temps, mod, optional ? InvokeMode.StaticOptional : InvokeMode.Static, JavaString(scope.Env, table, temps),
+            JavaString(scope.Env, function, temps), args);
     }
 
     public object?[] CallStaticMethod(ModInstance? mod, string table, string method, object?[] args)
     {
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
-        return Invoke(scope, temps, mod, InvokeMode.StaticMethod, Name(scope.Env, table), Name(scope.Env, method), args);
+        return Invoke(scope, temps, mod, InvokeMode.StaticMethod, JavaString(scope.Env, table, temps), JavaString(scope.Env, method, temps), args);
     }
 
     public object?[] CallGlobal(ModInstance? mod, string name, object?[] args)
     {
         var scope = LuaScope.Current;
         using var temps = new Temps(scope.Env);
-        return Invoke(scope, temps, mod, InvokeMode.Global, _JObject.Null, Name(scope.Env, name), args);
+        return Invoke(scope, temps, mod, InvokeMode.Global, _JObject.Null, JavaString(scope.Env, name, temps), args);
     }
 
     public object? GetStatic(string table, string field)
     {
         var scope = LuaScope.Current;
-        var result = Guard(() => CallObject(scope.Env, _getStatic, Name(scope.Env, table), Name(scope.Env, field)));
+        using var temps = new Temps(scope.Env);
+        var jTable = JavaString(scope.Env, table, temps);
+        var jField = JavaString(scope.Env, field, temps);
+        var result = Guard(() => CallObject(scope.Env, _getStatic, jTable, jField));
         return ValueBuffer.ReadOne(scope, result);
     }
 
@@ -220,16 +227,22 @@ internal sealed unsafe class LuaBridge : ILuaHost
         }
     }
 
-    private static _JObject Name(JNIEnv env, string name)
+    private static _JObject JavaString(JNIEnv env, string text, Temps temps)
     {
-        lock (NamesGate)
+        if (text.Length > MaxCachedLength)
+            return temps.String(text);
+        if (Strings.TryGetValue(text, out var cached))
+            return cached;
+        lock (StringsGate)
         {
-            if (Names.TryGetValue(name, out var cached))
+            if (Strings.TryGetValue(text, out cached))
                 return cached;
-            var local = (_JObject)env.AsJString(name);
+            if (Strings.Count >= MaxCachedStrings)
+                return temps.String(text);
+            var local = (_JObject)env.AsJString(text);
             var global = env.NewGlobalRef(local);
             env.DeleteLocalRef(local);
-            Names[name] = global;
+            Strings[text] = global;
             return global;
         }
     }
@@ -278,8 +291,8 @@ internal sealed unsafe class LuaBridge : ILuaHost
                 return ToJava(scope, union.Value, mod, temps);
             case bool flag:
                 return flag ? _true : _false;
-            case string:
-                return temps.Add(JavaBoxing.Box(env, value));
+            case string text:
+                return JavaString(env, text, temps);
             case char c:
                 return temps.String(c.ToString());
             case sbyte or byte or short or ushort or int or uint or long or ulong or float or double or decimal:

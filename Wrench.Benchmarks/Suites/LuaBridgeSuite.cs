@@ -12,9 +12,12 @@ public class LuaBridgeSuite
     private static readonly object?[] NoArgs = [];
     private static readonly object?[] OneArg = [0.5];
     private static readonly object?[] ThreeArgs = [1.0, 1.0, 1.0];
+    private static readonly object?[] TextArg = ["text"];
 
     private JNIEnv _env = null!;
     private GameObject _color = null!;
+    private GameObject _table = null!;
+    private int _counter;
 
     [GlobalSetup]
     public void Setup()
@@ -22,10 +25,54 @@ public class LuaBridgeSuite
         _env = BenchJvm.Start();
         using var batch = new JavaBatch(_env);
         _color = new Zomboid.Java.Core.Color(0.5f, 0.25f, 0.125f, 1f).AsGameObject().Keep();
+        _table = LuaBridge.Instance.NewTable().Keep();
+        LuaBridge.Instance.SetIndex(null, _table, "field", 1.0);
     }
 
     [GlobalCleanup]
-    public void Cleanup() => _color.Dispose();
+    public void Cleanup()
+    {
+        _color.Dispose();
+        _table.Dispose();
+    }
+
+    [Benchmark(OperationsPerInvoke = Ops, Description = "table.field (literal key)")]
+    public object? TableGet()
+    {
+        using var batch = new JavaBatch(_env);
+        object? result = null;
+        for (var i = 0; i < Ops; i++)
+            result = LuaBridge.Instance.Index(_table, "field");
+        return result;
+    }
+
+    [Benchmark(OperationsPerInvoke = Ops, Description = "table.field = 2 (literal key)")]
+    public void TableSet()
+    {
+        using var batch = new JavaBatch(_env);
+        for (var i = 0; i < Ops; i++)
+            LuaBridge.Instance.SetIndex(null, _table, "field", 2.0);
+    }
+
+    [Benchmark(OperationsPerInvoke = Ops, Description = "table[built key] (run-time string)")]
+    public object? TableGetBuiltKey()
+    {
+        using var batch = new JavaBatch(_env);
+        object? result = null;
+        for (var i = 0; i < Ops; i++)
+            result = LuaBridge.Instance.Index(_table, (++_counter & 1) == 0 ? string.Concat("fi", "eld") : string.Concat("fie", "ld"));
+        return result;
+    }
+
+    [Benchmark(OperationsPerInvoke = Ops, Description = "color:equals(\"text\") (string argument)")]
+    public object? CallStringArg()
+    {
+        using var batch = new JavaBatch(_env);
+        object? result = null;
+        for (var i = 0; i < Ops; i++)
+            result = LuaBridge.Instance.CallMethod(null, _color, "equals", TextArg)[0];
+        return result;
+    }
 
     [Benchmark(Baseline = true, OperationsPerInvoke = Ops, Description = "color:getR() -> number")]
     public object? CallNoArgsNumber()
