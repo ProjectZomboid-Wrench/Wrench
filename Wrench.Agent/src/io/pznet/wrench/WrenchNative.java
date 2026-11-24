@@ -7,9 +7,9 @@ public final class WrenchNative {
 
     public static native void hello(String message);
 
-    public static native void onLuaEvent(String name, Object[] args, boolean afterLua);
+    public static native void onLuaEvent(int event, Object args, boolean afterLua);
 
-    public static native Object[] invokeFunction(long id, Object[] args);
+    public static native Object invokeFunction(long id, Object args);
 
     public static native void onPermissionDecision(String modId, boolean allow);
 }

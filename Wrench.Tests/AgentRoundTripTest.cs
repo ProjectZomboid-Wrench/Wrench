@@ -84,6 +84,15 @@ public class AgentRoundTripTest
     }
 
     [TestMethod]
+    public void Call_Results_Keep_Their_Kinds()
+    {
+        var output = RunHello();
+
+        StringAssert.Contains(output,
+            "[Wrench.Tests.SampleMod] INFO: first results: mixed=1.5 nilFirst=nil objects=first many=0.5 text=text int=7");
+    }
+
+    [TestMethod]
     public void Exceptions_In_Dotnet_Functions_Become_Lua_Errors()
     {
         var output = RunHello();

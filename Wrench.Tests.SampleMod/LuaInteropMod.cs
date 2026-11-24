@@ -44,6 +44,14 @@ public sealed class LuaInteropMod : ModInstance
         rooms.add("kitchen");
         Log.Info($"AddPlayer({playerNum}) rooms={rooms.size()} player={player}");
 
+        object? mixed = Lua.Call("ResultsMixed");
+        object? nilFirst = Lua.Call("ResultsNilFirst");
+        object? objects = Lua.Call("ResultsObjects");
+        object? many = Lua.Call("ResultsMany");
+        object? text = Lua.Call("ResultsText");
+        object? seven = Lua.Call("ResultsInt");
+        Log.Info($"first results: mixed={mixed} nilFirst={nilFirst ?? "nil"} objects={objects} many={many} text={text} int={(seven is int i ? i : -1)}");
+
         try
         {
             Lua.Call("missingGlobal");

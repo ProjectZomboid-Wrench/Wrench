@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net11.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <IsPackable>false</IsPackable>
+        <JavaBin Condition="'$(JAVA_HOME)' != ''">$(JAVA_HOME)/bin/</JavaBin>
+        <PZ_DIR Condition="'$(PZ_DIR)' == ''">$(HOME)/.local/share/Steam/steamapps/common/ProjectZomboid/projectzomboid</PZ_DIR>
+        <PzJar>$(PZ_DIR)/projectzomboid.jar</PzJar>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Wrench.Agent\Wrench.Agent.csproj" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Wrench.Host\Wrench.Host.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <JavaSource Include="java/**/*.java" />
+    </ItemGroup>
+
+    <Target Name="StageAgentJars" AfterTargets="Build">
+        <ItemGroup>
+            <AgentJar Include="$(MSBuildThisFileDirectory)../Wrench.Agent/bin/$(Configuration)/net10.0/*.jar" />
+        </ItemGroup>
+        <Copy SourceFiles="@(AgentJar)" DestinationFolder="$(OutDir)java/" SkipUnchangedFiles="true" />
+    </Target>
+
+    <!-- The fixtures compile against the game's own Kahlua, so the benchmarks measure its real dispatch. -->
+    <Target Name="CompileBenchFixtures" AfterTargets="StageAgentJars" Inputs="@(JavaSource)" Outputs="$(OutDir)java/classes/.stamp">
+        <Error Condition="!Exists('$(PzJar)')" Text="projectzomboid.jar not found at $(PzJar); set PZ_DIR to the game's projectzomboid/ folder." />
+        <MakeDir Directories="$(OutDir)java/classes" />
+        <Exec Command="&quot;$(JavaBin)javac&quot; --release 22 -cp &quot;$(OutDir)java/wrench-agent.jar:$(PzJar)&quot; -d &quot;$(OutDir)java/classes&quot; @(JavaSource->'&quot;%(FullPath)&quot;', ' ')" />
+        <Touch Files="$(OutDir)java/classes/.stamp" AlwaysCreate="true" />
+    </Target>
+
+</Project>

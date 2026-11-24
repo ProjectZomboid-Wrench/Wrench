@@ -25,6 +25,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wrench.Tests.SampleMod", "W
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wrench.Tests", "Wrench.Tests\Wrench.Tests.csproj", "{2CD568AC-4D73-49B5-8259-7A602A388C3E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Wrench.Benchmarks", "Wrench.Benchmarks\Wrench.Benchmarks.csproj", "{2C73D095-395F-437B-8380-2A7E1D4A83CC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -143,6 +145,18 @@ Global
 		{2CD568AC-4D73-49B5-8259-7A602A388C3E}.Release|x64.Build.0 = Release|Any CPU
 		{2CD568AC-4D73-49B5-8259-7A602A388C3E}.Release|x86.ActiveCfg = Release|Any CPU
 		{2CD568AC-4D73-49B5-8259-7A602A388C3E}.Release|x86.Build.0 = Release|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Debug|x64.Build.0 = Debug|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Debug|x86.Build.0 = Debug|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Release|x64.ActiveCfg = Release|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Release|x64.Build.0 = Release|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Release|x86.ActiveCfg = Release|Any CPU
+		{2C73D095-395F-437B-8380-2A7E1D4A83CC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

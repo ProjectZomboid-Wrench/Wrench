@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using JNIBinding;
@@ -13,7 +14,9 @@ namespace Wrench.Host.Lua;
 internal static class LuaFunctions
 {
     // A null owner means Wrench's own functions, such as WrenchHost.decide.
-    private static readonly ConcurrentDictionary<long, (ModInstance? Mod, Delegate Function)> Functions = new();
+    private static readonly ConcurrentDictionary<long, BoundFunction> Functions = new();
+    private static readonly ConcurrentDictionary<MethodInfo, Func<object?, object?[], object?>> Invokers = new();
+    private static readonly Func<object, string> CallOrigin = function => $"the Lua call into {Describe((Delegate)function)}";
     private static readonly Logger Log = Logging.Log.For("Wrench.Host");
     private static long _lastId;
 
@@ -21,7 +24,7 @@ internal static class LuaFunctions
     public static long Register(ModInstance? mod, Delegate function)
     {
         var id = Interlocked.Increment(ref _lastId);
-        Functions[id] = (mod, function);
+        Functions[id] = new BoundFunction(mod, function);
         return id;
     }
 
@@ -37,13 +40,16 @@ internal static class LuaFunctions
 
         try
         {
-            using var scope = LuaScope.Enter(jEnv, entry.Mod, $"the Lua call into {Describe(entry.Function)}");
-            var luaArgs = JavaValues.ToDotnet(jEnv, new _JObjectArray(args), scope);
-            var result = InvokeBound(entry.Function, luaArgs);
-            if (entry.Function.Method.ReturnType == typeof(void))
+            using var scope = LuaScope.Enter(jEnv, entry.Mod, entry.Function, CallOrigin);
+            var result = entry.Invoke(ValueBuffer.ReadAll(scope, new _JObject(args)));
+            if (entry.ReturnsVoid)
+            {
+                ValueBuffer.WriteNone(jEnv);
                 return IntPtr.Zero;
-            // The array is returned to Java as a local ref of this native call, so it isn't released here.
-            return LuaBridge.NewResultArray(scope, [result], entry.Mod).Value;
+            }
+            using var temps = LuaBridge.Temps.Rent(jEnv);
+            // Returned to Java as a local ref of this native call, so it isn't released here.
+            return ValueBuffer.WriteOne(scope, result, entry.Mod, temps).Value;
         }
         catch (Exception e)
         {
@@ -58,18 +64,6 @@ internal static class LuaFunctions
         }
     }
 
-    private static object? InvokeBound(Delegate function, object?[] args)
-    {
-        var parameters = function.Method.GetParameters();
-        if (parameters is [{ ParameterType: var only }] && only == typeof(object[]))
-            return function.DynamicInvoke([args]);
-
-        var bound = new object?[parameters.Length];
-        for (var i = 0; i < parameters.Length; i++)
-            bound[i] = Bind(i < args.Length ? args[i] : null, parameters[i].ParameterType, i);
-        return function.DynamicInvoke(bound);
-    }
-
     private static object? Bind(object? value, Type type, int index)
     {
         if (value is null)
@@ -82,6 +76,65 @@ internal static class LuaFunctions
         if (value is IConvertible convertible && typeof(IConvertible).IsAssignableFrom(target))
             return convertible.ToType(target, CultureInfo.InvariantCulture);
         throw new LuaException($"argument #{index + 1}: expected {type.Name}, got {value.GetType().Name}");
+    }
+
+    // Calls the delegate's method directly when it can be, which is much cheaper than DynamicInvoke.
+    private static Func<object?, object?[], object?>? DirectInvoker(Delegate function)
+    {
+        var method = function.Method;
+        if (function.GetInvocationList().Length != 1 || method.IsStatic != function.Target is null
+            || method.GetParameters().Any(p => p.ParameterType.IsByRef || p.ParameterType.IsPointer))
+            return null;
+        return Invokers.GetOrAdd(method, static method =>
+        {
+            var target = Expression.Parameter(typeof(object));
+            var args = Expression.Parameter(typeof(object?[]));
+            var call = Expression.Call(method.IsStatic ? null : Expression.Convert(target, method.DeclaringType!), method,
+                method.GetParameters().Select((p, i) =>
+                    Expression.Convert(Expression.ArrayIndex(args, Expression.Constant(i)), p.ParameterType)));
+            Expression body = method.ReturnType == typeof(void)
+                ? Expression.Block(call, Expression.Constant(null))
+                : Expression.Convert(call, typeof(object));
+            return Expression.Lambda<Func<object?, object?[], object?>>(body, target, args).Compile();
+        });
+    }
+
+    /// <summary>A registered delegate with what binding Lua arguments to it needs, worked out once.</summary>
+    private sealed class BoundFunction
+    {
+        private readonly Type[] _parameters;
+        private readonly bool _takesAllArgs;
+        private readonly Func<object?, object?[], object?>? _invoker;
+
+        public BoundFunction(ModInstance? mod, Delegate function)
+        {
+            Mod = mod;
+            Function = function;
+            ReturnsVoid = function.Method.ReturnType == typeof(void);
+            _parameters = [.. function.Method.GetParameters().Select(p => p.ParameterType)];
+            _takesAllArgs = _parameters is [var only] && only == typeof(object[]);
+            _invoker = DirectInvoker(function);
+        }
+
+        public ModInstance? Mod { get; }
+
+        public Delegate Function { get; }
+
+        public bool ReturnsVoid { get; }
+
+        public object? Invoke(object?[] args)
+        {
+            object?[] bound;
+            if (_takesAllArgs)
+                bound = [args];
+            else
+            {
+                bound = new object?[_parameters.Length];
+                for (var i = 0; i < _parameters.Length; i++)
+                    bound[i] = Bind(i < args.Length ? args[i] : null, _parameters[i], i);
+            }
+            return _invoker is null ? Function.DynamicInvoke(bound) : _invoker(Function.Target, bound);
+        }
     }
 
     private static string Describe(Delegate function)
